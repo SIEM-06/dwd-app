@@ -90,6 +90,8 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
+    table.allow_autofit = False # Word'ün kendi kafasına göre boyutlandırmasını engeller
+    
     hdr_cells = table.rows[0].cells
     hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = 'ITEM NO', 'INSPECTION REMARK', 'UNIT', 'PRICE'
     for cell in hdr_cells:
@@ -105,18 +107,32 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
         fiyat = row['Fiyat (€)']
         row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
-    doc.add_paragraph()
+    # Ana tablonun genişliklerini milimetrik olarak sabitliyoruz
+    widths = [Cm(1.5), Cm(10.5), Cm(3), Cm(4)]
+    for row in table.rows:
+        for idx, width in enumerate(widths):
+            row.cells[idx].width = width
+            
+    # DİKKAT: Buradaki boş paragrafı sildik ki iki tablo boşluksuz birleşsin!
     
     tot_table = doc.add_table(rows=3, cols=2)
     tot_table.style = 'Table Grid'
-    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
+    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT # Sağa dayalı
+    tot_table.allow_autofit = False
     
     tot_table.rows[0].cells[0].text, tot_table.rows[0].cells[1].text = "TOTAL PRICE", a_str
     tot_table.rows[1].cells[0].text, tot_table.rows[1].cells[1].text = "VAT (20%)", k_str
     tot_table.rows[2].cells[0].text, tot_table.rows[2].cells[1].text = "GRAND TOTAL", g_str
     
+    # Sadece sayıların kalın olması sağlandı
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].runs[0].font.bold = True
+        
+    # Toplamlar tablosunun genişliği, ana tablonun son iki sütunuyla birebir aynı yapıldı
+    tot_widths = [Cm(3), Cm(4)]
+    for row in tot_table.rows:
+        for idx, width in enumerate(tot_widths):
+            row.cells[idx].width = width
                     
     doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
     doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
@@ -198,7 +214,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     ws.cell(row=row_idx, column=3).value = "TOTAL PRICE"
     ws.cell(row=row_idx, column=3).border = thin_border
     ws.cell(row=row_idx, column=4).value = a_str
-    ws.cell(row=row_idx, column=4).font = Font(bold=True)
+    ws.cell(row=row_idx, column=4).font = Font(bold=True) # Sadece sayı kalın
     ws.cell(row=row_idx, column=4).border = thin_border
     row_idx += 1
     
