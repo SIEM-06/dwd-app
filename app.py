@@ -285,6 +285,7 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
 
     pdf = PDF()
     pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=10)
     
     if os.path.exists("watermark.png"):
         pdf.image("watermark.png", x=30, y=80, w=150)
@@ -325,19 +326,19 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf.cell(30, 8, 'GRAND TOTAL', 1, 0, 'L')
     pdf.cell(45, 8, f"{genel_t:,.0f} EURO", 1, 1, 'L')
     
-    pdf.ln(15)
+    pdf.ln(10)
     
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Arial', 'B', 8)
     pdf.cell(0, 5, '* IMPORTANT NOTICE;', 0, 1, 'L')
-    pdf.set_font('Arial', '', 9)
+    pdf.set_font('Arial', '', 8)
     pdf.cell(0, 5, '- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW', 0, 1, 'L')
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Arial', 'B', 8)
     pdf.cell(0, 5, 'COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.', 0, 1, 'L')
-    pdf.ln(5)
+    pdf.ln(4)
     
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Arial', 'B', 8)
     pdf.cell(0, 5, '* REMARKS;', 0, 1, 'L')
-    pdf.set_font('Arial', '', 9)
+    pdf.set_font('Arial', '', 8)
     pdf.cell(0, 5, '- DELIVERY TIME FOR THE JOB IS 35 DAYS,', 0, 1, 'L')
     pdf.cell(0, 5, '- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,', 0, 1, 'L')
     pdf.cell(0, 5, '- PAYMENT WILL BE ACCEPTED AS BELOW;', 0, 1, 'L')
@@ -346,15 +347,18 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf.cell(10, 5, '', 0, 0)
     pdf.cell(0, 5, '- %50 UPON COMPLETION OF THE WORK.', 0, 1, 'L')
     
-    pdf.ln(15)
+    pdf.ln(10)
     
-    pdf.set_font('Arial', 'B', 9)
-    pdf.cell(0, 5, cevir_tr('CE Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
-    pdf.cell(0, 5, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
+    pdf.set_font('Arial', 'B', 8)
+    pdf.cell(0, 4, cevir_tr('CE Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
+    pdf.cell(0, 4, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
     pdf.set_font('Arial', '', 8)
-    pdf.cell(0, 5, cevir_tr('Bahcelievler Mah Sehit Fethi Cad. Duygu Sokak No.3 Ic Kapi No. 7'), 0, 1, 'L')
-    pdf.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
-    pdf.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
+    pdf.cell(0, 4, cevir_tr('Bahcelievler Mah Sehit Fethi Cad. Duygu Sokak No.3 Ic Kapi No. 7'), 0, 1, 'L')
+    pdf.cell(0, 4, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
+    pdf.cell(0, 4, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
+    
+    pdf.set_text_color(0, 51, 153)
+    pdf.cell(0, 4, 'Email- info@inno-mar.com.tr | www.inno-mar.com.tr', 0, 1, 'L')
     
     return pdf.output(dest='S').encode('latin-1')
 
