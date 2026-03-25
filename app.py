@@ -14,6 +14,12 @@ from openpyxl.drawing.image import Image as xlImage
 st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_sidebar_state="collapsed")
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
+
+# --- TARİH SEÇİCİ ---
+secilen_tarih = st.date_input("Teklif Tarihi Belirle", datetime.date.today())
+tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
+dosya_tarihi = secilen_tarih.strftime("%d_%m_%Y")
+
 st.info("Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
 # --- VERİ SETİ ---
@@ -48,19 +54,17 @@ col_c.metric("Genel Toplam", f"{genel_toplam:,.0f} €")
 st.write("---")
 
 # ==========================================
-# 1. WORD OLUŞTURMA MOTORU (ŞABLON GÖRÜNÜMÜ)
+# WORD OLUŞTURMA MOTORU
 # ==========================================
-def word_olustur(dataframe, ara_t, kdv_t, genel_t):
+def word_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
     doc = Document()
     
-    # 1. Logo
     if os.path.exists("logo.png"):
         p_logo = doc.add_paragraph()
         p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r_logo = p_logo.add_run()
         r_logo.add_picture("logo.png", width=Cm(6))
         
-    # 2. Firma Bilgileri (Mavi Renkli)
     p_info = doc.add_paragraph()
     run_name = p_info.add_run("INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
     run_name.bold = True
@@ -74,16 +78,13 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t):
     run_mail.font.color.rgb = RGBColor(0, 51, 153)
     run_mail.font.size = Pt(9)
     
-    # İnce Çizgi
     doc.add_paragraph("_" * 75)
     
-    # 3. Başlık ve Tarih
     p_title = doc.add_paragraph()
-    run_title = p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {datetime.date.today().strftime('%d.%m.%Y')}")
+    run_title = p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}")
     run_title.bold = True
     run_title.font.size = Pt(10)
     
-    # 4. Tablo
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     hdr_cells = table.rows[0].cells
@@ -103,7 +104,6 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t):
         
     doc.add_paragraph()
     
-    # 5. Toplamlar (Sağa yaslı tablo)
     tot_table = doc.add_table(rows=3, cols=2)
     tot_table.style = 'Table Grid'
     tot_table.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -117,14 +117,12 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t):
                 for run in paragraph.runs:
                     run.font.bold = True
                     
-    # 6. Alt Notlar
     doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
     doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
     
     doc.add_paragraph("\n* REMARKS;").runs[0].bold = True
     doc.add_paragraph("- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK.")
     
-    # 7. İmza
     doc.add_paragraph("\nCE İlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.").runs[0].bold = True
     doc.add_paragraph("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
     
@@ -133,14 +131,13 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t):
     return bio.getvalue()
 
 # ==========================================
-# 2. EXCEL OLUŞTURMA MOTORU (ŞABLON GÖRÜNÜMÜ)
+# EXCEL OLUŞTURMA MOTORU
 # ==========================================
-def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
+def excel_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
     wb = Workbook()
     ws = wb.active
     ws.title = "Innomar Teklif"
     
-    # Sütun Genişlikleri
     ws.column_dimensions['A'].width = 8
     ws.column_dimensions['B'].width = 55
     ws.column_dimensions['C'].width = 15
@@ -148,14 +145,11 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
     
     row_idx = 1
     
-    # 1. Logo
     if os.path.exists("logo.png"):
         img = xlImage("logo.png")
-        # Excel'de logoyu ortalamak için B1'e koyuyoruz
         ws.add_image(img, 'B1')
-        row_idx = 8 # Logonun kapladığı alanı atla
+        row_idx = 8
         
-    # 2. Şirket Bilgileri
     blue_font_bold = Font(color="003399", bold=True, size=11)
     black_font = Font(color="000000", size=10)
     blue_font = Font(color="003399", size=10)
@@ -173,14 +167,12 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
     ws[f'B{row_idx}'].font = blue_font
     row_idx += 2
     
-    # 3. Başlık
     ws[f'B{row_idx}'] = "• MY ADA DRY DOCK SERVICES QUOTATION;"
     ws[f'B{row_idx}'].font = Font(bold=True)
-    ws[f'D{row_idx}'] = f"* DATE: {datetime.date.today().strftime('%d.%m.%Y')}"
+    ws[f'D{row_idx}'] = f"* DATE: {tarih}"
     ws[f'D{row_idx}'].font = Font(bold=True)
     row_idx += 2
     
-    # 4. Tablo Başlıkları
     headers = ['ITEM NO', 'INSPECTION REMARK', 'UNIT', 'PRICE']
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     
@@ -191,7 +183,6 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
         cell.border = thin_border
     row_idx += 1
     
-    # 5. Tablo Verileri
     for index, row in dataframe.iterrows():
         ws.cell(row=row_idx, column=1).value = index + 1
         ws.cell(row=row_idx, column=2).value = str(row['İşlem (INSPECTION REMARK)'])
@@ -203,7 +194,6 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
             ws.cell(row=row_idx, column=i).border = thin_border
         row_idx += 1
         
-    # 6. Toplamlar
     ws.cell(row=row_idx, column=3).value = "TOTAL PRICE"
     ws.cell(row=row_idx, column=3).font = Font(bold=True)
     ws.cell(row=row_idx, column=3).border = thin_border
@@ -225,7 +215,6 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
     ws.cell(row=row_idx, column=4).border = thin_border
     row_idx += 2
     
-    # 7. Alt Notlar
     ws[f'B{row_idx}'] = "* IMPORTANT NOTICE;"
     ws[f'B{row_idx}'].font = Font(bold=True)
     row_idx += 1
@@ -250,14 +239,14 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
     return output.getvalue()
 
 # ==========================================
-# 3. PDF OLUŞTURMA MOTORU (TIPATIP ŞABLON)
+# PDF OLUŞTURMA MOTORU
 # ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
 
-def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
+def pdf_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
     class PDF(FPDF):
         def header(self):
             if os.path.exists("logo.png"):
@@ -293,7 +282,7 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
     pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
-    pdf.cell(60, 10, f'* DATE: {datetime.date.today().strftime("%d.%m.%Y")}', 0, 1, 'R')
+    pdf.cell(60, 10, f'* DATE: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
     pdf.set_draw_color(0, 0, 0)
@@ -366,11 +355,10 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
 st.markdown("### 📥 Çıktı Al")
 
 btn_word, btn_excel, btn_pdf = st.columns(3)
-tarih_str = datetime.date.today().strftime('%d_%m_%Y')
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam), file_name=f"Teklif_{tarih_str}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam), file_name=f"Teklif_{tarih_str}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam), file_name=f"Teklif_{tarih_str}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
