@@ -1,19 +1,18 @@
 import streamlit as st
 import pandas as pd
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 import datetime
+import os
 from fpdf import FPDF
 
-# --- MOBİL UYUMLU SAYFA AYARLARI ---
 st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_sidebar_state="collapsed")
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
-st.info("📱 Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
+st.info("Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-# --- VERİ SETİ ---
 if 'veri_df' not in st.session_state:
     data = {
         'İşlem (INSPECTION REMARK)': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
@@ -24,34 +23,35 @@ if 'veri_df' not in st.session_state:
 
 df = st.session_state.veri_df
 
-# --- MOBİL UYUMLU İNTERAKTİF TABLO ---
 duzenlenmis_df = st.data_editor(
     df,
     column_config={
         "Fiyat (€)": st.column_config.NumberColumn(format="%d €"),
     },
     num_rows="dynamic",
-    use_container_width=True # Telefonda ekrana tam oturmasını sağlar
+    use_container_width=True 
 )
 
-# --- HESAPLAMALAR ---
 ara_toplam = duzenlenmis_df['Fiyat (€)'].sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
 
 st.write("---")
-# Telefonda bu 3 kutu alt alta çok şık durur
-col1, col2, col3 = st.columns(3)
-col1.metric("Ara Toplam", f"{ara_toplam:,.0f} €")
-col2.metric("KDV (%20)", f"{kdv:,.0f} €")
-col3.metric("Genel Toplam", f"{genel_toplam:,.0f} €")
+col_a, col_b, col_c = st.columns(3)
+col_a.metric("Ara Toplam", f"{ara_toplam:,.0f} €")
+col_b.metric("KDV (%20)", f"{kdv:,.0f} €")
+col_c.metric("Genel Toplam", f"{genel_toplam:,.0f} €")
 st.write("---")
 
-# ==========================================
-# 1. WORD OLUŞTURMA MOTORU
-# ==========================================
 def word_olustur(dataframe, ara_t, kdv_t, genel_t):
     doc = Document()
+    
+    if os.path.exists("logo.png"):
+        pic_para = doc.add_paragraph()
+        pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_pic = pic_para.add_run()
+        run_pic.add_picture("logo.png", width=Cm(6))
+        
     header = doc.add_paragraph()
     header.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = header.add_run("INNOMAR MARİNA YAT LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
@@ -81,14 +81,10 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t):
     doc.save(bio)
     return bio.getvalue()
 
-# ==========================================
-# 2. EXCEL OLUŞTURMA MOTORU
-# ==========================================
 def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         dataframe.to_excel(writer, index=False, sheet_name='Teklif_Listesi')
-        # Alt kısma toplamları ekleme
         toplamlar = pd.DataFrame({
             'İşlem (INSPECTION REMARK)': ['ARA TOPLAM', 'KDV (%20)', 'GENEL TOPLAM'],
             'Birim': ['', '', ''],
@@ -97,10 +93,6 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
         toplamlar.to_excel(writer, index=False, header=False, startrow=len(dataframe)+2, sheet_name='Teklif_Listesi')
     return output.getvalue()
 
-# ==========================================
-# 3. PDF OLUŞTURMA MOTORU
-# ==========================================
-# PDF'te telefonlardan dolayı çökme olmaması için Türkçe karakterleri İngilizceye çeviriyoruz
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
@@ -109,11 +101,16 @@ def cevir_tr(metin):
 def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 8, 'INNOMAR MARINA YAT LIMAN A.S.', 0, 1, 'C')
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'C')
-    pdf.ln(5)
+    
+    if os.path.exists("logo.png"):
+        pdf.image("logo.png", x=80, y=10, w=50)
+        pdf.ln(30) 
+    else:
+        pdf.set_font('Arial', 'B', 12)
+        pdf.cell(0, 8, 'INNOMAR MARINA YAT LIMAN A.S.', 0, 1, 'C')
+        pdf.set_font('Arial', '', 9)
+        pdf.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'C')
+        pdf.ln(5)
     
     pdf.set_font('Arial', 'B', 12)
     pdf.cell(0, 10, 'MY ADA DRY DOCK SERVICES QUOTATION', 0, 1, 'C')
@@ -141,18 +138,14 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- MOBİL UYUMLU İNDİRME BUTONLARI ---
 st.markdown("### 📥 Çıktı Al")
-st.caption("Aşağıdaki butonları kullanarak teklifi istediğiniz formatta cihazınıza indirebilirsiniz.")
 
-# Butonları yan yana dizer
-btn1, btn2, btn3 = st.columns(3)
-
+btn_word, btn_excel, btn_pdf = st.columns(3)
 tarih_str = datetime.date.today().strftime('%d_%m_%Y')
 
-with btn1:
+with btn_word:
     st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam), file_name=f"Teklif_{tarih_str}.docx", type="primary", use_container_width=True)
-with btn2:
+with btn_excel:
     st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam), file_name=f"Teklif_{tarih_str}.xlsx", type="primary", use_container_width=True)
-with btn3:
+with btn_pdf:
     st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam), file_name=f"Teklif_{tarih_str}.pdf", type="primary", use_container_width=True)
