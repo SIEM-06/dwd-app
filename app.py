@@ -1,18 +1,22 @@
 import streamlit as st
 import pandas as pd
-from docx import Document
-from docx.shared import Pt, Cm
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 import datetime
 import os
 from fpdf import FPDF
+from docx import Document
+from docx.shared import Pt, Cm, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, Border, Side
+from openpyxl.drawing.image import Image as xlImage
 
 st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_sidebar_state="collapsed")
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
 st.info("Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
+# --- VERİ SETİ ---
 if 'veri_df' not in st.session_state:
     data = {
         'İşlem (INSPECTION REMARK)': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
@@ -43,28 +47,51 @@ col_b.metric("KDV (%20)", f"{kdv:,.0f} €")
 col_c.metric("Genel Toplam", f"{genel_toplam:,.0f} €")
 st.write("---")
 
+# ==========================================
+# 1. WORD OLUŞTURMA MOTORU (ŞABLON GÖRÜNÜMÜ)
+# ==========================================
 def word_olustur(dataframe, ara_t, kdv_t, genel_t):
     doc = Document()
     
+    # 1. Logo
     if os.path.exists("logo.png"):
-        pic_para = doc.add_paragraph()
-        pic_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_pic = pic_para.add_run()
-        run_pic.add_picture("logo.png", width=Cm(6))
+        p_logo = doc.add_paragraph()
+        p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_logo = p_logo.add_run()
+        r_logo.add_picture("logo.png", width=Cm(6))
         
-    header = doc.add_paragraph()
-    header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = header.add_run("INNOMAR MARİNA YAT LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
-    run.bold = True
-    header.add_run("Pendik - ISTANBUL/TURKEY | info@inno-mar.com.tr\n")
+    # 2. Firma Bilgileri (Mavi Renkli)
+    p_info = doc.add_paragraph()
+    run_name = p_info.add_run("INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
+    run_name.bold = True
+    run_name.font.color.rgb = RGBColor(0, 51, 153)
+    run_name.font.size = Pt(10)
     
-    doc.add_paragraph(f"DATE: {datetime.date.today().strftime('%d.%m.%Y')}").alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    doc.add_heading('MY ADA DRY DOCK SERVICES QUOTATION', level=1)
+    run_addr = p_info.add_run("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\n")
+    run_addr.font.size = Pt(9)
     
+    run_mail = p_info.add_run("Email- info@inno-mar.com.tr | www.inno-mar.com.tr")
+    run_mail.font.color.rgb = RGBColor(0, 51, 153)
+    run_mail.font.size = Pt(9)
+    
+    # İnce Çizgi
+    doc.add_paragraph("_" * 75)
+    
+    # 3. Başlık ve Tarih
+    p_title = doc.add_paragraph()
+    run_title = p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {datetime.date.today().strftime('%d.%m.%Y')}")
+    run_title.bold = True
+    run_title.font.size = Pt(10)
+    
+    # 4. Tablo
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     hdr_cells = table.rows[0].cells
-    hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = 'NO', 'INSPECTION REMARK', 'UNIT', 'PRICE'
+    hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = 'ITEM NO', 'INSPECTION REMARK', 'UNIT', 'PRICE'
+    for cell in hdr_cells:
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.font.bold = True
     
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
@@ -74,23 +101,152 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t):
         fiyat = row['Fiyat (€)']
         row_cells[3].text = f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-"
         
-    doc.add_paragraph("\nTOTALS:")
-    doc.add_paragraph(f"TOTAL PRICE: {ara_t:,.0f} EURO\nVAT (20%): {kdv_t:,.0f} EURO\nGRAND TOTAL: {genel_t:,.0f} EURO")
+    doc.add_paragraph()
+    
+    # 5. Toplamlar (Sağa yaslı tablo)
+    tot_table = doc.add_table(rows=3, cols=2)
+    tot_table.style = 'Table Grid'
+    tot_table.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    tot_table.rows[0].cells[0].text, tot_table.rows[0].cells[1].text = "TOTAL PRICE", f"{ara_t:,.0f} EURO"
+    tot_table.rows[1].cells[0].text, tot_table.rows[1].cells[1].text = "VAT (20%)", f"{kdv_t:,.0f} EURO"
+    tot_table.rows[2].cells[0].text, tot_table.rows[2].cells[1].text = "GRAND TOTAL", f"{genel_t:,.0f} EURO"
+    
+    for row in tot_table.rows:
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.bold = True
+                    
+    # 6. Alt Notlar
+    doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
+    doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
+    
+    doc.add_paragraph("\n* REMARKS;").runs[0].bold = True
+    doc.add_paragraph("- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK.")
+    
+    # 7. İmza
+    doc.add_paragraph("\nCE İlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.").runs[0].bold = True
+    doc.add_paragraph("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
     
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
 
+# ==========================================
+# 2. EXCEL OLUŞTURMA MOTORU (ŞABLON GÖRÜNÜMÜ)
+# ==========================================
 def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Innomar Teklif"
+    
+    # Sütun Genişlikleri
+    ws.column_dimensions['A'].width = 8
+    ws.column_dimensions['B'].width = 55
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 20
+    
+    row_idx = 1
+    
+    # 1. Logo
+    if os.path.exists("logo.png"):
+        img = xlImage("logo.png")
+        # Excel'de logoyu ortalamak için B1'e koyuyoruz
+        ws.add_image(img, 'B1')
+        row_idx = 8 # Logonun kapladığı alanı atla
+        
+    # 2. Şirket Bilgileri
+    blue_font_bold = Font(color="003399", bold=True, size=11)
+    black_font = Font(color="000000", size=10)
+    blue_font = Font(color="003399", size=10)
+    
+    ws[f'B{row_idx}'] = "INNOMAR MARİNA YAT LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş."
+    ws[f'B{row_idx}'].font = blue_font_bold
+    row_idx += 1
+    ws[f'B{row_idx}'] = "Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7 Pendik - ISTANBUL/TURKEY"
+    ws[f'B{row_idx}'].font = black_font
+    row_idx += 1
+    ws[f'B{row_idx}'] = "Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907"
+    ws[f'B{row_idx}'].font = black_font
+    row_idx += 1
+    ws[f'B{row_idx}'] = "Email- info@inno-mar.com.tr | www.inno-mar.com.tr"
+    ws[f'B{row_idx}'].font = blue_font
+    row_idx += 2
+    
+    # 3. Başlık
+    ws[f'B{row_idx}'] = "• MY ADA DRY DOCK SERVICES QUOTATION;"
+    ws[f'B{row_idx}'].font = Font(bold=True)
+    ws[f'D{row_idx}'] = f"* DATE: {datetime.date.today().strftime('%d.%m.%Y')}"
+    ws[f'D{row_idx}'].font = Font(bold=True)
+    row_idx += 2
+    
+    # 4. Tablo Başlıkları
+    headers = ['ITEM NO', 'INSPECTION REMARK', 'UNIT', 'PRICE']
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=row_idx, column=col_num)
+        cell.value = header
+        cell.font = Font(bold=True)
+        cell.border = thin_border
+    row_idx += 1
+    
+    # 5. Tablo Verileri
+    for index, row in dataframe.iterrows():
+        ws.cell(row=row_idx, column=1).value = index + 1
+        ws.cell(row=row_idx, column=2).value = str(row['İşlem (INSPECTION REMARK)'])
+        ws.cell(row=row_idx, column=3).value = str(row['Birim'])
+        fiyat = row['Fiyat (€)']
+        ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-"
+        
+        for i in range(1, 5):
+            ws.cell(row=row_idx, column=i).border = thin_border
+        row_idx += 1
+        
+    # 6. Toplamlar
+    ws.cell(row=row_idx, column=3).value = "TOTAL PRICE"
+    ws.cell(row=row_idx, column=3).font = Font(bold=True)
+    ws.cell(row=row_idx, column=3).border = thin_border
+    ws.cell(row=row_idx, column=4).value = f"{ara_t:,.0f} EURO"
+    ws.cell(row=row_idx, column=4).border = thin_border
+    row_idx += 1
+    
+    ws.cell(row=row_idx, column=3).value = "VAT (20%)"
+    ws.cell(row=row_idx, column=3).font = Font(bold=True)
+    ws.cell(row=row_idx, column=3).border = thin_border
+    ws.cell(row=row_idx, column=4).value = f"{kdv_t:,.0f} EURO"
+    ws.cell(row=row_idx, column=4).border = thin_border
+    row_idx += 1
+    
+    ws.cell(row=row_idx, column=3).value = "GRAND TOTAL"
+    ws.cell(row=row_idx, column=3).font = Font(bold=True)
+    ws.cell(row=row_idx, column=3).border = thin_border
+    ws.cell(row=row_idx, column=4).value = f"{genel_t:,.0f} EURO"
+    ws.cell(row=row_idx, column=4).border = thin_border
+    row_idx += 2
+    
+    # 7. Alt Notlar
+    ws[f'B{row_idx}'] = "* IMPORTANT NOTICE;"
+    ws[f'B{row_idx}'].font = Font(bold=True)
+    row_idx += 1
+    ws[f'B{row_idx}'] = "- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY."
+    row_idx += 2
+    
+    ws[f'B{row_idx}'] = "* REMARKS;"
+    ws[f'B{row_idx}'].font = Font(bold=True)
+    row_idx += 1
+    ws[f'B{row_idx}'] = "- DELIVERY TIME FOR THE JOB IS 35 DAYS,"
+    row_idx += 1
+    ws[f'B{row_idx}'] = "- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,"
+    row_idx += 1
+    ws[f'B{row_idx}'] = "- PAYMENT WILL BE ACCEPTED AS BELOW;"
+    row_idx += 1
+    ws[f'B{row_idx}'] = "    - %50 BEFORE WORK BEGINS,"
+    row_idx += 1
+    ws[f'B{row_idx}'] = "    - %50 UPON COMPLETION OF THE WORK."
+    
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        dataframe.to_excel(writer, index=False, sheet_name='Teklif_Listesi')
-        toplamlar = pd.DataFrame({
-            'İşlem (INSPECTION REMARK)': ['ARA TOPLAM', 'KDV (%20)', 'GENEL TOPLAM'],
-            'Birim': ['', '', ''],
-            'Fiyat (€)': [ara_t, kdv_t, genel_t]
-        })
-        toplamlar.to_excel(writer, index=False, header=False, startrow=len(dataframe)+2, sheet_name='Teklif_Listesi')
+    wb.save(output)
     return output.getvalue()
 
 # ==========================================
@@ -102,33 +258,26 @@ def cevir_tr(metin):
     return metin
 
 def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
-    from fpdf import FPDF
-    import os
-    import datetime
-
     class PDF(FPDF):
         def header(self):
-            # 1. LOGO KISMI
             if os.path.exists("logo.png"):
                 self.image("logo.png", x=65, y=10, w=80)
             self.ln(25)
             
-            # 2. ŞİRKET BİLGİLERİ (Mavi ve Siyah Tonlar)
             self.set_font('Arial', 'B', 10)
-            self.set_text_color(0, 51, 153) # Kurumsal Lacivert/Mavi
+            self.set_text_color(0, 51, 153)
             self.cell(0, 5, cevir_tr('INNOMAR MARİNA YAT'), 0, 1, 'L')
             self.cell(0, 5, cevir_tr('LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.'), 0, 1, 'L')
             
             self.set_font('Arial', '', 9)
-            self.set_text_color(0, 0, 0) # Siyah
+            self.set_text_color(0, 0, 0)
             self.cell(0, 5, cevir_tr('Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7'), 0, 1, 'L')
             self.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
             self.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
             
-            self.set_text_color(0, 51, 153) # Tekrar Mavi
+            self.set_text_color(0, 51, 153)
             self.cell(0, 5, 'Email- info@inno-mar.com.tr | www.inno-mar.com.tr', 0, 1, 'L')
             
-            # 3. İNCE MAVİ ÇİZGİ
             self.set_draw_color(0, 51, 153)
             self.set_line_width(0.3)
             self.line(10, self.get_y()+2, 200, self.get_y()+2)
@@ -137,19 +286,15 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf = PDF()
     pdf.add_page()
     
-    # 4. ARKA PLAN FİLİGRANI (Opsiyonel)
     if os.path.exists("watermark.png"):
         pdf.image("watermark.png", x=30, y=80, w=150)
         
-    # 5. BAŞLIK VE TARİH
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
-    # Aynı satırda hem sol başlık hem sağ tarih
     pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
     pdf.cell(60, 10, f'* DATE: {datetime.date.today().strftime("%d.%m.%Y")}', 0, 1, 'R')
     pdf.ln(2)
     
-    # 6. TABLO BAŞLIKLARI
     pdf.set_draw_color(0, 0, 0)
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(15, 8, 'ITEM NO', 1)
@@ -158,7 +303,6 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf.cell(45, 8, 'PRICE', 1)
     pdf.ln()
     
-    # 7. TABLO İÇERİĞİ (Dinamik Veriler)
     pdf.set_font('Arial', '', 8)
     for index, row in dataframe.iterrows():
         pdf.cell(15, 8, str(index + 1), 1)
@@ -168,9 +312,8 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
         pdf.cell(45, 8, f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-", 1)
         pdf.ln()
         
-    # 8. TOPLAMLAR TABLOSU (Sağ Alt Köşe)
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(115, 8, '', 0, 0) # Sola boşluk bırakarak sağa yaslama
+    pdf.cell(115, 8, '', 0, 0)
     pdf.cell(30, 8, 'TOTAL PRICE', 1, 0, 'L')
     pdf.cell(45, 8, f"{ara_t:,.0f} EURO", 1, 1, 'L')
     
@@ -184,7 +327,6 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     
     pdf.ln(15)
     
-    # 9. ALT NOTLAR (IMPORTANT NOTICE & REMARKS)
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(0, 5, '* IMPORTANT NOTICE;', 0, 1, 'L')
     pdf.set_font('Arial', '', 9)
@@ -199,14 +341,13 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     pdf.cell(0, 5, '- DELIVERY TIME FOR THE JOB IS 35 DAYS,', 0, 1, 'L')
     pdf.cell(0, 5, '- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,', 0, 1, 'L')
     pdf.cell(0, 5, '- PAYMENT WILL BE ACCEPTED AS BELOW;', 0, 1, 'L')
-    pdf.cell(10, 5, '', 0, 0) # Girinti
+    pdf.cell(10, 5, '', 0, 0)
     pdf.cell(0, 5, '- %50 BEFORE WORK BEGINS,', 0, 1, 'L')
-    pdf.cell(10, 5, '', 0, 0) # Girinti
+    pdf.cell(10, 5, '', 0, 0)
     pdf.cell(0, 5, '- %50 UPON COMPLETION OF THE WORK.', 0, 1, 'L')
     
     pdf.ln(15)
     
-    # 10. İMZA BLOĞU
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(0, 5, cevir_tr('CE Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
     pdf.cell(0, 5, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
@@ -217,6 +358,7 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
     
     return pdf.output(dest='S').encode('latin-1')
 
+# --- İNDİRME BUTONLARI ---
 st.markdown("### 📥 Çıktı Al")
 
 btn_word, btn_excel, btn_pdf = st.columns(3)
