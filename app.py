@@ -15,14 +15,12 @@ st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_s
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
 
-# --- TARİH SEÇİCİ ---
 secilen_tarih = st.date_input("Teklif Tarihi Belirle", datetime.date.today())
 tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
 dosya_tarihi = secilen_tarih.strftime("%d_%m_%Y")
 
 st.info("Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-# --- VERİ SETİ ---
 if 'veri_df' not in st.session_state:
     data = {
         'İşlem (INSPECTION REMARK)': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
@@ -249,36 +247,42 @@ def cevir_tr(metin):
 def pdf_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
     class PDF(FPDF):
         def header(self):
-            if os.path.exists("logo.png"):
-                self.image("logo.png", x=65, y=10, w=80)
-            self.ln(25)
-            
-            self.set_font('Arial', 'B', 10)
-            self.set_text_color(0, 51, 153)
-            self.cell(0, 5, cevir_tr('INNOMAR MARİNA YAT'), 0, 1, 'L')
-            self.cell(0, 5, cevir_tr('LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.'), 0, 1, 'L')
-            
-            self.set_font('Arial', '', 9)
-            self.set_text_color(0, 0, 0)
-            self.cell(0, 5, cevir_tr('Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7'), 0, 1, 'L')
-            self.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
-            self.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
-            
-            self.set_text_color(0, 51, 153)
-            self.cell(0, 5, 'Email- info@inno-mar.com.tr | www.inno-mar.com.tr', 0, 1, 'L')
-            
-            self.set_draw_color(0, 51, 153)
-            self.set_line_width(0.3)
-            self.line(10, self.get_y()+2, 200, self.get_y()+2)
-            self.ln(10)
+            # Sadece 1. sayfada antetli kağıt başlığını çiz
+            if self.page_no() == 1:
+                if os.path.exists("logo.png"):
+                    self.image("logo.png", x=65, y=10, w=80)
+                self.ln(25)
+                
+                self.set_font('Arial', 'B', 10)
+                self.set_text_color(0, 51, 153)
+                self.cell(0, 5, cevir_tr('INNOMAR MARİNA YAT'), 0, 1, 'L')
+                self.cell(0, 5, cevir_tr('LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.'), 0, 1, 'L')
+                
+                self.set_font('Arial', '', 9)
+                self.set_text_color(0, 0, 0)
+                self.cell(0, 5, cevir_tr('Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7'), 0, 1, 'L')
+                self.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
+                self.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
+                
+                self.set_text_color(0, 51, 153)
+                self.cell(0, 5, 'Email- info@inno-mar.com.tr | www.inno-mar.com.tr', 0, 1, 'L')
+                
+                self.set_draw_color(0, 51, 153)
+                self.set_line_width(0.3)
+                self.line(10, self.get_y()+2, 200, self.get_y()+2)
+                self.ln(10)
+                
+                # Filigranı da sadece ilk sayfaya atıyoruz
+                if os.path.exists("watermark.png"):
+                    self.image("watermark.png", x=30, y=80, w=150)
+            else:
+                # 2. ve sonraki sayfalarda temiz bir üst boşluk bırakıp devam et
+                self.ln(15)
 
     pdf = PDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=10)
+    pdf.set_auto_page_break(auto=True, margin=15)
     
-    if os.path.exists("watermark.png"):
-        pdf.image("watermark.png", x=30, y=80, w=150)
-        
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
     pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
