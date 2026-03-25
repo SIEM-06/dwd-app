@@ -7,7 +7,6 @@ from fpdf import FPDF
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.drawing.image import Image as xlImage
@@ -103,16 +102,10 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
         fiyat = row['Fiyat (€)']
         row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
-    widths = [Cm(1.5), Cm(9.5), Cm(4.5), Cm(3.5)]
-    for row in table.rows:
-        for idx, width in enumerate(widths):
-            row.cells[idx].width = width
-            
     doc.add_paragraph()
     
     tot_table = doc.add_table(rows=3, cols=2)
     tot_table.style = 'Table Grid'
-    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
     
     tot_table.rows[0].cells[0].text, tot_table.rows[0].cells[1].text = "TOTAL PRICE", a_str
     tot_table.rows[1].cells[0].text, tot_table.rows[1].cells[1].text = "VAT (20%)", k_str
@@ -120,11 +113,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].runs[0].font.bold = True
-        
-    tot_widths = [Cm(4.5), Cm(3.5)]
-    for row in tot_table.rows:
-        for idx, width in enumerate(tot_widths):
-            row.cells[idx].width = width
                     
     doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
     doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
