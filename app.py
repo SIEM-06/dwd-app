@@ -56,7 +56,6 @@ col_b.metric("KDV (%20)", kdv_str)
 col_c.metric("Genel Toplam", genel_str)
 st.write("---")
 
-# --- WORD OLUŞTURMA MOTORU ---
 def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     doc = Document()
     
@@ -104,6 +103,11 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
         fiyat = row['Fiyat (€)']
         row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
+    widths = [Cm(1.5), Cm(9.5), Cm(4.5), Cm(3.5)]
+    for row in table.rows:
+        for idx, width in enumerate(widths):
+            row.cells[idx].width = width
+            
     doc.add_paragraph()
     
     tot_table = doc.add_table(rows=3, cols=2)
@@ -116,6 +120,11 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].runs[0].font.bold = True
+        
+    tot_widths = [Cm(4.5), Cm(3.5)]
+    for row in tot_table.rows:
+        for idx, width in enumerate(tot_widths):
+            row.cells[idx].width = width
                     
     doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
     doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
@@ -130,16 +139,15 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     doc.save(bio)
     return bio.getvalue()
 
-# --- EXCEL OLUŞTURMA MOTORU ---
 def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     wb = Workbook()
     ws = wb.active
     ws.title = "Innomar Teklif"
     
     ws.column_dimensions['A'].width = 8
-    ws.column_dimensions['B'].width = 55
-    ws.column_dimensions['C'].width = 15
-    ws.column_dimensions['D'].width = 20
+    ws.column_dimensions['B'].width = 52
+    ws.column_dimensions['C'].width = 25
+    ws.column_dimensions['D'].width = 18
     
     row_idx = 1
     
@@ -236,7 +244,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     wb.save(output)
     return output.getvalue()
 
-# --- PDF OLUŞTURMA MOTORU ---
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
@@ -287,37 +294,37 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
     pdf.set_draw_color(0, 0, 0)
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(15, 8, 'ITEM NO', 1)
-    pdf.cell(100, 8, 'INSPECTION REMARK', 1)
-    pdf.cell(30, 8, 'UNIT', 1)
-    pdf.cell(45, 8, 'PRICE', 1)
+    pdf.cell(95, 8, 'INSPECTION REMARK', 1)
+    pdf.cell(45, 8, 'UNIT', 1)
+    pdf.cell(35, 8, 'PRICE', 1)
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
     for index, row in dataframe.iterrows():
         pdf.cell(15, 8, str(index + 1), 1)
-        pdf.cell(100, 8, cevir_tr(str(row['İşlem (INSPECTION REMARK)'])), 1)
-        pdf.cell(30, 8, cevir_tr(str(row['Birim'])), 1)
+        pdf.cell(95, 8, cevir_tr(str(row['İşlem (INSPECTION REMARK)'])), 1)
+        pdf.cell(45, 8, cevir_tr(str(row['Birim'])), 1)
         fiyat = row['Fiyat (€)']
-        pdf.cell(45, 8, f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-", 1)
+        pdf.cell(35, 8, f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-", 1)
         pdf.ln()
         
     pdf.set_font('Arial', '', 9)
-    pdf.cell(115, 8, '', 0, 0)
-    pdf.cell(30, 8, 'TOTAL PRICE', 1, 0, 'L')
+    pdf.cell(110, 8, '', 0, 0)
+    pdf.cell(45, 8, 'TOTAL PRICE', 1, 0, 'L')
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(45, 8, a_str, 1, 1, 'L')
+    pdf.cell(35, 8, a_str, 1, 1, 'L')
     
     pdf.set_font('Arial', '', 9)
-    pdf.cell(115, 8, '', 0, 0)
-    pdf.cell(30, 8, 'VAT (20%)', 1, 0, 'L')
+    pdf.cell(110, 8, '', 0, 0)
+    pdf.cell(45, 8, 'VAT (20%)', 1, 0, 'L')
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(45, 8, k_str, 1, 1, 'L')
+    pdf.cell(35, 8, k_str, 1, 1, 'L')
     
     pdf.set_font('Arial', '', 9)
-    pdf.cell(115, 8, '', 0, 0)
-    pdf.cell(30, 8, 'GRAND TOTAL', 1, 0, 'L')
+    pdf.cell(110, 8, '', 0, 0)
+    pdf.cell(45, 8, 'GRAND TOTAL', 1, 0, 'L')
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(45, 8, g_str, 1, 1, 'L')
+    pdf.cell(35, 8, g_str, 1, 1, 'L')
     
     pdf.ln(10)
     
@@ -355,7 +362,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     return pdf.output(dest='S').encode('latin-1')
 
-# --- İNDİRME BUTONLARI ---
 st.markdown("### 📥 Çıktı Al")
 
 btn_word, btn_excel, btn_pdf = st.columns(3)
