@@ -7,6 +7,7 @@ from fpdf import FPDF
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.drawing.image import Image as xlImage
@@ -44,17 +45,21 @@ ara_toplam = duzenlenmis_df['Fiyat (€)'].sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
 
+ara_str = f"{ara_toplam:,.0f}".replace(",", ".") + " EURO"
+kdv_str = f"{kdv:,.0f}".replace(",", ".") + " EURO"
+genel_str = f"{genel_toplam:,.0f}".replace(",", ".") + " EURO"
+
 st.write("---")
 col_a, col_b, col_c = st.columns(3)
-col_a.metric("Ara Toplam", f"{ara_toplam:,.0f} €")
-col_b.metric("KDV (%20)", f"{kdv:,.0f} €")
-col_c.metric("Genel Toplam", f"{genel_toplam:,.0f} €")
+col_a.metric("Ara Toplam", ara_str)
+col_b.metric("KDV (%20)", kdv_str)
+col_c.metric("Genel Toplam", genel_str)
 st.write("---")
 
 # ==========================================
 # WORD OLUŞTURMA MOTORU
 # ==========================================
-def word_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
+def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     doc = Document()
     
     if os.path.exists("logo.png"):
@@ -98,22 +103,20 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
         row_cells[1].text = str(row['İşlem (INSPECTION REMARK)'])
         row_cells[2].text = str(row['Birim'])
         fiyat = row['Fiyat (€)']
-        row_cells[3].text = f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-"
+        row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
     doc.add_paragraph()
     
     tot_table = doc.add_table(rows=3, cols=2)
     tot_table.style = 'Table Grid'
-    tot_table.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    tot_table.rows[0].cells[0].text, tot_table.rows[0].cells[1].text = "TOTAL PRICE", f"{ara_t:,.0f} EURO"
-    tot_table.rows[1].cells[0].text, tot_table.rows[1].cells[1].text = "VAT (20%)", f"{kdv_t:,.0f} EURO"
-    tot_table.rows[2].cells[0].text, tot_table.rows[2].cells[1].text = "GRAND TOTAL", f"{genel_t:,.0f} EURO"
+    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
+    
+    tot_table.rows[0].cells[0].text, tot_table.rows[0].cells[1].text = "TOTAL PRICE", a_str
+    tot_table.rows[1].cells[0].text, tot_table.rows[1].cells[1].text = "VAT (20%)", k_str
+    tot_table.rows[2].cells[0].text, tot_table.rows[2].cells[1].text = "GRAND TOTAL", g_str
     
     for row in tot_table.rows:
-        for cell in row.cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.bold = True
+        row.cells[1].paragraphs[0].runs[0].font.bold = True
                     
     doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
     doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
@@ -131,7 +134,7 @@ def word_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
 # ==========================================
 # EXCEL OLUŞTURMA MOTORU
 # ==========================================
-def excel_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
+def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     wb = Workbook()
     ws = wb.active
     ws.title = "Innomar Teklif"
@@ -186,30 +189,30 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
         ws.cell(row=row_idx, column=2).value = str(row['İşlem (INSPECTION REMARK)'])
         ws.cell(row=row_idx, column=3).value = str(row['Birim'])
         fiyat = row['Fiyat (€)']
-        ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-"
+        ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
         for i in range(1, 5):
             ws.cell(row=row_idx, column=i).border = thin_border
         row_idx += 1
         
     ws.cell(row=row_idx, column=3).value = "TOTAL PRICE"
-    ws.cell(row=row_idx, column=3).font = Font(bold=True)
     ws.cell(row=row_idx, column=3).border = thin_border
-    ws.cell(row=row_idx, column=4).value = f"{ara_t:,.0f} EURO"
+    ws.cell(row=row_idx, column=4).value = a_str
+    ws.cell(row=row_idx, column=4).font = Font(bold=True)
     ws.cell(row=row_idx, column=4).border = thin_border
     row_idx += 1
     
     ws.cell(row=row_idx, column=3).value = "VAT (20%)"
-    ws.cell(row=row_idx, column=3).font = Font(bold=True)
     ws.cell(row=row_idx, column=3).border = thin_border
-    ws.cell(row=row_idx, column=4).value = f"{kdv_t:,.0f} EURO"
+    ws.cell(row=row_idx, column=4).value = k_str
+    ws.cell(row=row_idx, column=4).font = Font(bold=True)
     ws.cell(row=row_idx, column=4).border = thin_border
     row_idx += 1
     
     ws.cell(row=row_idx, column=3).value = "GRAND TOTAL"
-    ws.cell(row=row_idx, column=3).font = Font(bold=True)
     ws.cell(row=row_idx, column=3).border = thin_border
-    ws.cell(row=row_idx, column=4).value = f"{genel_t:,.0f} EURO"
+    ws.cell(row=row_idx, column=4).value = g_str
+    ws.cell(row=row_idx, column=4).font = Font(bold=True)
     ws.cell(row=row_idx, column=4).border = thin_border
     row_idx += 2
     
@@ -244,10 +247,9 @@ def cevir_tr(metin):
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
 
-def pdf_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
+def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
     class PDF(FPDF):
         def header(self):
-            # Sadece 1. sayfada antetli kağıt başlığını çiz
             if self.page_no() == 1:
                 if os.path.exists("logo.png"):
                     self.image("logo.png", x=65, y=10, w=80)
@@ -272,11 +274,9 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
                 self.line(10, self.get_y()+2, 200, self.get_y()+2)
                 self.ln(10)
                 
-                # Filigranı da sadece ilk sayfaya atıyoruz
                 if os.path.exists("watermark.png"):
                     self.image("watermark.png", x=30, y=80, w=150)
             else:
-                # 2. ve sonraki sayfalarda temiz bir üst boşluk bırakıp devam et
                 self.ln(15)
 
     pdf = PDF()
@@ -303,21 +303,26 @@ def pdf_olustur(dataframe, ara_t, kdv_t, genel_t, tarih):
         pdf.cell(100, 8, cevir_tr(str(row['İşlem (INSPECTION REMARK)'])), 1)
         pdf.cell(30, 8, cevir_tr(str(row['Birim'])), 1)
         fiyat = row['Fiyat (€)']
-        pdf.cell(45, 8, f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-", 1)
+        pdf.cell(45, 8, f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-", 1)
         pdf.ln()
         
-    pdf.set_font('Arial', 'B', 9)
+    pdf.set_font('Arial', '', 9)
     pdf.cell(115, 8, '', 0, 0)
     pdf.cell(30, 8, 'TOTAL PRICE', 1, 0, 'L')
-    pdf.cell(45, 8, f"{ara_t:,.0f} EURO", 1, 1, 'L')
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(45, 8, a_str, 1, 1, 'L')
     
+    pdf.set_font('Arial', '', 9)
     pdf.cell(115, 8, '', 0, 0)
     pdf.cell(30, 8, 'VAT (20%)', 1, 0, 'L')
-    pdf.cell(45, 8, f"{kdv_t:,.0f} EURO", 1, 1, 'L')
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(45, 8, k_str, 1, 1, 'L')
     
+    pdf.set_font('Arial', '', 9)
     pdf.cell(115, 8, '', 0, 0)
     pdf.cell(30, 8, 'GRAND TOTAL', 1, 0, 'L')
-    pdf.cell(45, 8, f"{genel_t:,.0f} EURO", 1, 1, 'L')
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(45, 8, g_str, 1, 1, 'L')
     
     pdf.ln(10)
     
@@ -361,8 +366,8 @@ st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
