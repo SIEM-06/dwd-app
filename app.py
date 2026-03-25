@@ -1,70 +1,109 @@
 import streamlit as st
 import pandas as pd
-# PDF veya Excel oluşturma kütüphanelerini buraya ekleyeceğiz (Örn: reportlab, xlsxwriter)
+from docx import Document
+from docx.shared import Pt, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+import io
+import datetime
 
-# --- SAYFA AYARLARI VE LOGO ---
-st.set_page_config(layout="wide", page_title="Bisiklet Teklif Portali")
+st.set_page_config(layout="wide", page_title="Innomar Teklif Oluşturucu")
 
-# Sol üst köşeye logo placeholder (Örnek bisiklet logosu)
-# Eniştenin gerçek logosunu buraya st.image("firma_logosu.png") ile ekleyeceğiz.
-st.markdown("## 🚲 [ŞİRKET LOGO PLACEHOLDER]") 
+st.title("⚓ INNOMAR | Hızlı Teklif Oluşturucu")
+st.write("Aşağıdaki tabloya yapılacak işlemleri girin, program teklif formatını otomatik hazırlasın.")
 
-st.title("BİSİKLET TEKLİF OLUŞTURUCU | Streamlit Portali")
-st.write("---")
-
-# --- VERİ SETİ (Örnek) ---
-# Gerçek uygulamada bu veri Excel'den veya API'den gelecek.
 if 'veri_df' not in st.session_state:
     data = {
-        'Parça Adı': ['Bisiklet Tekerleği', 'Jel Sele', 'Karbon Gidon', 'Vites Arttırıcı', 'Fren Balatası'],
-        'Adet': [2, 1, 1, 1, 4],
-        'Birim Fiyat (TL)': [2000.0, 450.0, 1200.0, 850.0, 150.0]
+        'İşlem (INSPECTION REMARK)': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
+        'Birim (UNIT)': ['2 PIECES', '1 SET', '1 SET'],
+        'Fiyat (EURO)': [40000.0, 12000.0, 0.0]
     }
     st.session_state.veri_df = pd.DataFrame(data)
 
 df = st.session_state.veri_df
 
-# --- İNTERAKTİF TABLO VE HESAPLAMA ---
-st.subheader("Teklif İçeriğini Düzenle")
-
-# Streamlit'in veri düzenleme aracı (data_editor) tam olarak görseldeki işi yapar
+st.subheader("Teklif Kalemleri")
 duzenlenmis_df = st.data_editor(
     df,
     column_config={
-        "Adet": st.column_config.NumberColumn(help="Miktarı girin"),
-        "Birim Fiyat (TL)": st.column_config.NumberColumn(format="%.2f TL"),
+        "Fiyat (EURO)": st.column_config.NumberColumn(format="%d €"),
     },
-    disabled=["Parça Adı"], # Parça adları değiştirilemesin
-    num_rows="dynamic" # Yeni satır eklenebilsin
+    num_rows="dynamic",
+    use_container_width=True
 )
 
-# Arka planda otomatik hesaplama
-duzenlenmis_df['Satır Toplamı (TL)'] = duzenlenmis_df['Adet'] * duzenlenmis_df['Birim Fiyat (TL)']
-genel_toplam = duzenlenmis_df['Satır Toplamı (TL)'].sum()
+ara_toplam = duzenlenmis_df['Fiyat (EURO)'].sum()
+kdv = ara_toplam * 0.20
+genel_toplam = ara_toplam + kdv
 
-# --- SONUÇLAR VE AKSİYON BUTONLARI ---
 st.write("---")
-col1, col2 = st.columns([3, 1])
+col1, col2, col3 = st.columns(3)
+col1.metric("Ara Toplam", f"{ara_toplam:,.2f} €")
+col2.metric("KDV (%20)", f"{kdv:,.2f} €")
+col3.metric("Genel Toplam", f"{genel_toplam:,.2f} €")
 
-with col2:
-    st.markdown(f"### GENEL TOPLAM: **{genel_toplam:,.2f} TL**")
+def teklif_olustur(dataframe, ara_t, kdv_t, genel_t):
+    doc = Document()
+    
+    # Başlık ve Şirket Bilgileri
+    header = doc.add_paragraph()
+    header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = header.add_run("INNOMAR MARİNA YAT LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
+    run.bold = True
+    run.font.size = Pt(12)
+    header.add_run("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7 Pendik - ISTANBUL/TURKEY\n")
+    header.add_run("Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr\n")
+    
+    doc.add_paragraph(f"DATE: {datetime.date.today().strftime('%d.%m.%Y')}").alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    
+    doc.add_heading('MY ADA DRY DOCK SERVICES QUOTATION', level=1)
+    
+    # Tablo Oluşturma
+    table = doc.add_table(rows=1, cols=4)
+    table.style = 'Table Grid'
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'ITEM NO'
+    hdr_cells[1].text = 'INSPECTION REMARK'
+    hdr_cells[2].text = 'UNIT'
+    hdr_cells[3].text = 'PRICE'
+    
+    for index, row in dataframe.iterrows():
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(index + 1)
+        row_cells[1].text = str(row['İşlem (INSPECTION REMARK)'])
+        row_cells[2].text = str(row['Birim (UNIT)'])
+        fiyat = row['Fiyat (EURO)']
+        row_cells[3].text = f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-"
+        
+    doc.add_paragraph()
+    
+    # Toplamlar Tablosu
+    tot_table = doc.add_table(rows=3, cols=2)
+    tot_table.rows[0].cells[0].text = "TOTAL PRICE"
+    tot_table.rows[0].cells[1].text = f"{ara_t:,.2f} EURO"
+    tot_table.rows[1].cells[0].text = "VAT (20%)"
+    tot_table.rows[1].cells[1].text = f"{kdv_t:,.2f} EURO"
+    tot_table.rows[2].cells[0].text = "GRAND TOTAL"
+    tot_table.rows[2].cells[1].text = f"{genel_t:,.2f} EURO"
+    
+    # Alt Notlar
+    doc.add_paragraph("\n* IMPORTANT NOTICE;")
+    doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
+    doc.add_paragraph("\n* REMARKS;")
+    doc.add_paragraph("- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n  - %50 BEFORE WORK BEGINS,\n  - %50 UPON COMPLETION OF THE WORK.")
+    
+    doc.add_paragraph("\nİlker TEKINKAYA | Managing Partner\nINNOMAR MARİNA YAT LİMAN A.Ş.").alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
-# Buton Alanı
-st.write("")
-col3, col4, col5 = st.columns([2, 2, 4])
+    bio = io.BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
 
-with col3:
-    # BU BUTON GÖRSELDEKİ ANA AKSİYON
-    if st.button("DÖKÜMANI HAZIRLA (LOGO VE FORMATLI PDF)", type="primary"):
-        st.info("🔄 PDF formatlanıyor ve logo ekleniyor... (Bu kısma kod eklenecek)")
-        # BURAYA: duzenlenmis_df'i alıp, logoyu ekleyip PDF oluşturan fonksiyon gelecek.
-        # Örn: pdf_olustur(duzenlenmis_df, logo_path, "teklif.pdf")
-
-with col4:
-    if st.button("Sıfırla"):
-        del st.session_state.veri_df
-        st.experimental_rerun()
-
-# Alt kısımdaki bilgilendirme notu
 st.write("---")
-st.caption("ℹ️ Bu prototip, kullanıcıdan gelen tabloyu işleyip, otomatik logo ve özel şablon ile PDF dosyası oluşturacak sistemi simüle eder. Gerçekleştirilen her değişiklik PDF çıktısını da günceller.")
+word_dosyasi = teklif_olustur(duzenlenmis_df, ara_toplam, kdv, genel_toplam)
+
+st.download_button(
+    label="📄 TEKLİFİ İNDİR (WORD)",
+    data=word_dosyasi,
+    file_name=f"Innomar_Teklif_{datetime.date.today().strftime('%d_%m_%Y')}.docx",
+    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    type="primary"
+)
