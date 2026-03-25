@@ -93,48 +93,127 @@ def excel_olustur(dataframe, ara_t, kdv_t, genel_t):
         toplamlar.to_excel(writer, index=False, header=False, startrow=len(dataframe)+2, sheet_name='Teklif_Listesi')
     return output.getvalue()
 
+# ==========================================
+# 3. PDF OLUŞTURMA MOTORU (TIPATIP ŞABLON)
+# ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
 
 def pdf_olustur(dataframe, ara_t, kdv_t, genel_t):
-    pdf = FPDF()
+    from fpdf import FPDF
+    import os
+    import datetime
+
+    class PDF(FPDF):
+        def header(self):
+            # 1. LOGO KISMI
+            if os.path.exists("logo.png"):
+                self.image("logo.png", x=65, y=10, w=80)
+            self.ln(25)
+            
+            # 2. ŞİRKET BİLGİLERİ (Mavi ve Siyah Tonlar)
+            self.set_font('Arial', 'B', 10)
+            self.set_text_color(0, 51, 153) # Kurumsal Lacivert/Mavi
+            self.cell(0, 5, cevir_tr('INNOMAR MARİNA YAT'), 0, 1, 'L')
+            self.cell(0, 5, cevir_tr('LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.'), 0, 1, 'L')
+            
+            self.set_font('Arial', '', 9)
+            self.set_text_color(0, 0, 0) # Siyah
+            self.cell(0, 5, cevir_tr('Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7'), 0, 1, 'L')
+            self.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
+            self.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
+            
+            self.set_text_color(0, 51, 153) # Tekrar Mavi
+            self.cell(0, 5, 'Email- info@inno-mar.com.tr | www.inno-mar.com.tr', 0, 1, 'L')
+            
+            # 3. İNCE MAVİ ÇİZGİ
+            self.set_draw_color(0, 51, 153)
+            self.set_line_width(0.3)
+            self.line(10, self.get_y()+2, 200, self.get_y()+2)
+            self.ln(10)
+
+    pdf = PDF()
     pdf.add_page()
     
-    if os.path.exists("logo.png"):
-        pdf.image("logo.png", x=80, y=10, w=50)
-        pdf.ln(30) 
-    else:
-        pdf.set_font('Arial', 'B', 12)
-        pdf.cell(0, 8, 'INNOMAR MARINA YAT LIMAN A.S.', 0, 1, 'C')
-        pdf.set_font('Arial', '', 9)
-        pdf.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'C')
-        pdf.ln(5)
+    # 4. ARKA PLAN FİLİGRANI (Opsiyonel)
+    if os.path.exists("watermark.png"):
+        pdf.image("watermark.png", x=30, y=80, w=150)
+        
+    # 5. BAŞLIK VE TARİH
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_text_color(0, 0, 0)
+    # Aynı satırda hem sol başlık hem sağ tarih
+    pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
+    pdf.cell(60, 10, f'* DATE: {datetime.date.today().strftime("%d.%m.%Y")}', 0, 1, 'R')
+    pdf.ln(2)
     
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, 'MY ADA DRY DOCK SERVICES QUOTATION', 0, 1, 'C')
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(0, 10, f'DATE: {datetime.date.today().strftime("%d.%m.%Y")}', 0, 1, 'R')
-    
+    # 6. TABLO BAŞLIKLARI
+    pdf.set_draw_color(0, 0, 0)
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(10, 8, 'NO', 1); pdf.cell(115, 8, 'INSPECTION REMARK', 1); pdf.cell(25, 8, 'UNIT', 1); pdf.cell(35, 8, 'PRICE', 1)
+    pdf.cell(15, 8, 'ITEM NO', 1)
+    pdf.cell(100, 8, 'INSPECTION REMARK', 1)
+    pdf.cell(30, 8, 'UNIT', 1)
+    pdf.cell(45, 8, 'PRICE', 1)
     pdf.ln()
     
+    # 7. TABLO İÇERİĞİ (Dinamik Veriler)
     pdf.set_font('Arial', '', 8)
     for index, row in dataframe.iterrows():
-        pdf.cell(10, 8, str(index + 1), 1)
-        pdf.cell(115, 8, cevir_tr(str(row['İşlem (INSPECTION REMARK)'])), 1)
-        pdf.cell(25, 8, cevir_tr(str(row['Birim'])), 1)
+        pdf.cell(15, 8, str(index + 1), 1)
+        pdf.cell(100, 8, cevir_tr(str(row['İşlem (INSPECTION REMARK)'])), 1)
+        pdf.cell(30, 8, cevir_tr(str(row['Birim'])), 1)
         fiyat = row['Fiyat (€)']
-        pdf.cell(35, 8, f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-", 1)
+        pdf.cell(45, 8, f"{fiyat:,.0f} EURO" if fiyat > 0 else "-NIL-", 1)
         pdf.ln()
         
+    # 8. TOPLAMLAR TABLOSU (Sağ Alt Köşe)
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(115, 8, '', 0, 0) # Sola boşluk bırakarak sağa yaslama
+    pdf.cell(30, 8, 'TOTAL PRICE', 1, 0, 'L')
+    pdf.cell(45, 8, f"{ara_t:,.0f} EURO", 1, 1, 'L')
+    
+    pdf.cell(115, 8, '', 0, 0)
+    pdf.cell(30, 8, 'VAT (20%)', 1, 0, 'L')
+    pdf.cell(45, 8, f"{kdv_t:,.0f} EURO", 1, 1, 'L')
+    
+    pdf.cell(115, 8, '', 0, 0)
+    pdf.cell(30, 8, 'GRAND TOTAL', 1, 0, 'L')
+    pdf.cell(45, 8, f"{genel_t:,.0f} EURO", 1, 1, 'L')
+    
+    pdf.ln(15)
+    
+    # 9. ALT NOTLAR (IMPORTANT NOTICE & REMARKS)
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(0, 5, '* IMPORTANT NOTICE;', 0, 1, 'L')
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(0, 5, '- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW', 0, 1, 'L')
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(0, 5, 'COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.', 0, 1, 'L')
     pdf.ln(5)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(150, 8, 'TOTAL PRICE:', 0, 0, 'R'); pdf.cell(35, 8, f"{ara_t:,.0f} EURO", 1, 1, 'R')
-    pdf.cell(150, 8, 'VAT (20%):', 0, 0, 'R'); pdf.cell(35, 8, f"{kdv_t:,.0f} EURO", 1, 1, 'R')
-    pdf.cell(150, 8, 'GRAND TOTAL:', 0, 0, 'R'); pdf.cell(35, 8, f"{genel_t:,.0f} EURO", 1, 1, 'R')
+    
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(0, 5, '* REMARKS;', 0, 1, 'L')
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(0, 5, '- DELIVERY TIME FOR THE JOB IS 35 DAYS,', 0, 1, 'L')
+    pdf.cell(0, 5, '- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,', 0, 1, 'L')
+    pdf.cell(0, 5, '- PAYMENT WILL BE ACCEPTED AS BELOW;', 0, 1, 'L')
+    pdf.cell(10, 5, '', 0, 0) # Girinti
+    pdf.cell(0, 5, '- %50 BEFORE WORK BEGINS,', 0, 1, 'L')
+    pdf.cell(10, 5, '', 0, 0) # Girinti
+    pdf.cell(0, 5, '- %50 UPON COMPLETION OF THE WORK.', 0, 1, 'L')
+    
+    pdf.ln(15)
+    
+    # 10. İMZA BLOĞU
+    pdf.set_font('Arial', 'B', 9)
+    pdf.cell(0, 5, cevir_tr('CE Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
+    pdf.cell(0, 5, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
+    pdf.set_font('Arial', '', 8)
+    pdf.cell(0, 5, cevir_tr('Bahcelievler Mah Sehit Fethi Cad. Duygu Sokak No.3 Ic Kapi No. 7'), 0, 1, 'L')
+    pdf.cell(0, 5, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
+    pdf.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
     
     return pdf.output(dest='S').encode('latin-1')
 
