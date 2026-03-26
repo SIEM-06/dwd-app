@@ -22,7 +22,7 @@ secili_sablon = st.sidebar.radio(
     ["⚓ INNOMAR Özel Teklif", "📄 Standart Proforma Fatura"]
 )
 
-gizle_checkbox = st.sidebar.checkbox("🔒 Birim Fiyatını Çıktılarda Gizle (Sansürle)", value=False)
+gizle_checkbox = st.sidebar.checkbox("🔒 Birim Fiyatını Çıktılarda Gizle (Sansürle)", value=False, help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu '***' olarak görünür.")
 
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
     st.session_state.aktif_sablon = secili_sablon
@@ -35,10 +35,12 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
         data = {
-            'Açıklama': ['Bakım Onarım Hizmeti', ''],
-            'Birim Fiyatı': ['1000', '0'],
-            'Adet': ['1', '0'],
-            'Tutar': [1000.0, 0.0]
+            'Marka': ['Örnek Marka', ''],
+            'Açıklama': ['Örnek Açıklama', ''],
+            'KDV': ['%20', '%20'],
+            'Adet': ['1', '2'],
+            'Birim Fiyat': ['1000', '500'],
+            'Toplam Fiyat': [1000.0, 1000.0]
         }
         st.session_state.not_alani = "Banka Hesap Bilgilerimiz:\nBanka Adı: \nIBAN: \nHesap Sahibi: "
     
@@ -61,7 +63,7 @@ else: sembol, kur_metin = "₺", "TL"
 
 # --- DİNAMİK SÜTUN YÖNETİMİ ---
 st.write("---")
-st.caption("Aşağıdaki kutuya virgülle ayırarak istediğiniz kadar sütun ekleyebilir veya silebilirsiniz. **DİKKAT: Fiyat/tutar sütunu her zaman EN SONDA olmalıdır.**")
+st.caption("Aşağıdaki kutuya virgülle ayırarak istediğiniz kadar sütun ekleyebilir veya silebilirsiniz. **DİKKAT: Hesaplamaların doğru çalışması için fiyat/tutar sütunu her zaman EN SONDA olmalıdır.**")
 
 mevcut_sutunlar = ", ".join(st.session_state.veri_df.columns)
 yeni_sutunlar_str = st.text_input("Tablo Sütunları:", mevcut_sutunlar)
@@ -120,12 +122,12 @@ st.write("---")
 st.subheader("📄 Belge Altı Notları")
 st.text_area("Bu alana yazdığınız metin belgenin altına eklenecektir:", key="not_alani", height=150)
 
-if st.button("🔄 Notları Sisteme Kaydet"):
+if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 st.write("---")
 
 # ==========================================
-# YARDIMCI FONKSİYONLAR
+# AKILLI HİZALAMA VE GENİŞLİK ALGORİTMALARI
 # ==========================================
 def get_alignment(col_name):
     name = str(col_name).lower()
@@ -143,6 +145,7 @@ def get_pdf_widths(headers, total_w=190):
         elif any(x in name for x in ['marka']): widths.append(25)
         elif any(x in name for x in ['açıklama', 'remark', 'işlem']): widths.append(60)
         else: widths.append(25)
+    
     scale = total_w / sum(widths) if sum(widths) > 0 else 1
     return [w * scale for w in widths]
 
@@ -161,6 +164,9 @@ def set_excel_col_widths(ws, headers):
         else:
             ws.column_dimensions[col_letter].width = 20
 
+# ==========================================
+# ÇIKTI MOTORLARI
+# ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
@@ -168,12 +174,10 @@ def cevir_tr(metin):
 
 def get_birim_col(df_columns):
     for col in df_columns:
-        if "birim fiyat" in str(col).lower(): return col
+        if "birim fiyat" in str(col).lower():
+            return col
     return None
 
-# ==========================================
-# ÇIKTI MOTORLARI
-# ==========================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
     doc = Document()
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
@@ -196,20 +200,38 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         p_title = doc.add_paragraph()
         p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}").bold = True
     else:
-        # YENİ FATURA DÜZENİ İÇİN GÖRSEL TASLAK (Word)
-        doc.add_paragraph("\n" * 3) # Antet için boşluk
+        # Fatura Şablonu Native Çizimi (Word)
+        p_header = doc.add_paragraph()
+        r1 = p_header.add_run("INNOMARİN\n")
+        r1.bold = True
+        r1.font.color.rgb = RGBColor(0, 51, 153)
+        r1.font.size = Pt(24)
         
-        # Üst bilgiler tablosu (Fatura Kesilen vs Fatura No)
-        header_table = doc.add_table(rows=3, cols=2)
-        header_table.cell(0,0).text = "Fatura Kesilen:"
-        header_table.cell(0,0).paragraphs[0].runs[0].font.bold = True
-        header_table.cell(0,1).text = "Fatura Numarası: ........................"
+        r2 = p_header.add_run("SAILING INTO THE FUTURE\n")
+        r2.italic = True
+        r2.font.color.rgb = RGBColor(100, 100, 100)
+        r2.font.size = Pt(11)
         
-        header_table.cell(1,0).text = "Müşteri Adı: .............................................................."
-        header_table.cell(1,1).text = f"Fatura Tarihi: {tarih}"
+        p_header.add_run("info@innomarin.com | www.innomarin.com\nKılavuz Sok. No: 16/6 Heybeliada / İSTANBUL")
         
-        header_table.cell(2,0).text = "Adres: ........................................................................\n"
-        header_table.cell(2,1).text = ""
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        r_title = p_title.add_run("Proforma Fatura")
+        r_title.bold = True
+        r_title.font.size = Pt(18)
+        
+        doc.add_paragraph("_" * 75)
+        
+        info_table = doc.add_table(rows=3, cols=2)
+        info_table.cell(0,0).text = "Fatura Kesilen:"
+        info_table.cell(0,0).paragraphs[0].runs[0].font.bold = True
+        info_table.cell(0,1).text = "Fatura Numarası: ........................"
+        
+        info_table.cell(1,0).text = "Müşteri Adı: .............................................................."
+        info_table.cell(1,1).text = f"Fatura Tarihi: {tarih}"
+        
+        info_table.cell(2,0).text = "Adres: ........................................................................"
+        info_table.cell(2,1).text = ""
         doc.add_paragraph()
     
     table = doc.add_table(rows=1, cols=len(headers))
@@ -295,22 +317,40 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
-                    # YENİ FATURA DÜZENİ İÇİN GÖRSEL TASLAK (PDF)
-                    if os.path.exists("arkaplan.png"): 
-                        self.image("arkaplan.png", 0, 0, 210, 297)
-                    self.set_y(65)
+                    # Fatura Şablonu Native Çizimi (PDF)
+                    self.set_y(15)
+                    self.set_font('Arial', 'B', 24)
+                    self.set_text_color(0, 51, 153)
+                    self.cell(100, 10, cevir_tr('INNOMARIN'), 0, 0, 'L')
+                    self.set_font('Arial', 'B', 18)
+                    self.set_text_color(0, 0, 0)
+                    self.cell(90, 10, cevir_tr('Proforma Fatura'), 0, 1, 'R')
+                    
+                    self.set_font('Arial', 'I', 10)
+                    self.set_text_color(100, 100, 100)
+                    self.cell(190, 5, cevir_tr('SAILING INTO THE FUTURE'), 0, 1, 'L')
+                    self.ln(2)
+                    
+                    self.set_font('Arial', '', 9)
+                    self.set_text_color(0, 0, 0)
+                    self.cell(190, 5, cevir_tr('info@innomarin.com | www.innomarin.com'), 0, 1, 'L')
+                    self.cell(190, 5, cevir_tr('Kilavuz Sok. No: 16/6 Heybeliada / ISTANBUL'), 0, 1, 'L')
+                    
+                    self.ln(3)
+                    self.set_draw_color(200, 200, 200)
+                    self.line(10, self.get_y(), 200, self.get_y())
+                    self.ln(5)
                     
                     self.set_font('Arial', 'B', 10)
-                    self.set_text_color(0, 0, 0)
-                    self.cell(120, 6, cevir_tr('Fatura Kesilen:'), 0, 0, 'L')
+                    self.cell(100, 6, cevir_tr('Fatura Kesilen:'), 0, 0, 'L')
                     self.set_font('Arial', '', 10)
-                    self.cell(0, 6, cevir_tr('Fatura Numarasi: ........................'), 0, 1, 'L')
+                    self.cell(90, 6, cevir_tr('Fatura Numarasi: ........................'), 0, 1, 'L')
                     
-                    self.cell(120, 6, cevir_tr('Musteri Adi: ..............................................................'), 0, 0, 'L')
-                    self.cell(0, 6, cevir_tr(f'Fatura Tarihi: {tarih}'), 0, 1, 'L')
+                    self.cell(100, 6, cevir_tr('Musteri Adi: ..............................................................'), 0, 0, 'L')
+                    self.cell(90, 6, cevir_tr(f'Fatura Tarihi: {tarih}'), 0, 1, 'L')
                     
-                    self.cell(120, 6, cevir_tr('Adres: ........................................................................'), 0, 1, 'L')
-                    self.ln(5)
+                    self.cell(190, 6, cevir_tr('Adres: ........................................................................'), 0, 1, 'L')
+                    self.ln(8)
             else:
                 self.ln(15)
 
@@ -318,8 +358,9 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
+    pdf.set_font('Arial', 'B', 10)
+    pdf.set_text_color(0, 0, 0)
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        pdf.set_font('Arial', 'B', 10)
         pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
         pdf.cell(60, 10, f'* DATE/TARIH: {tarih}', 0, 1, 'R')
         pdf.ln(2)
@@ -380,6 +421,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.ln(10)
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(0, 5, cevir_tr(notlar))
+    pdf.ln(10)
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -412,19 +454,37 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # YENİ FATURA DÜZENİ İÇİN GÖRSEL TASLAK (Excel)
+        # Fatura Şablonu Native Çizimi (Excel)
         row_idx = 2
+        ws.cell(row=row_idx, column=1).value = "INNOMARİN"
+        ws.cell(row=row_idx, column=1).font = Font(color="003399", bold=True, size=20)
+        ws.cell(row=row_idx, column=5).value = "Proforma Fatura"
+        ws.cell(row=row_idx, column=5).font = Font(bold=True, size=16)
+        row_idx += 1
+        
+        ws.cell(row=row_idx, column=1).value = "SAILING INTO THE FUTURE"
+        ws.cell(row=row_idx, column=1).font = Font(italic=True, color="666666", size=10)
+        row_idx += 2
+        
+        ws.cell(row=row_idx, column=1).value = "info@innomarin.com | www.innomarin.com"
+        row_idx += 1
+        ws.cell(row=row_idx, column=1).value = "Kılavuz Sok. No: 16/6 Heybeliada / İSTANBUL"
+        row_idx += 2
+        
         ws.cell(row=row_idx, column=1).value = "Fatura Kesilen:"
         ws.cell(row=row_idx, column=1).font = Font(bold=True)
-        ws.cell(row=row_idx, column=4).value = "Fatura Numarası: ........................"
+        ws.cell(row=row_idx, column=5).value = "Fatura Numarası: ........................"
         row_idx += 1
+        
         ws.cell(row=row_idx, column=1).value = "Müşteri Adı: .............................................................."
-        ws.cell(row=row_idx, column=4).value = f"Fatura Tarihi: {tarih}"
+        ws.cell(row=row_idx, column=5).value = f"Fatura Tarihi: {tarih}"
         row_idx += 1
+        
         ws.cell(row=row_idx, column=1).value = "Adres: ........................................................................"
         row_idx += 3
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
+    
     set_excel_col_widths(ws, headers)
     
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
