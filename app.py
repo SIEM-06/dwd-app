@@ -218,7 +218,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     for satir in notlar.split('\n'):
         doc.add_paragraph(satir)
     
-    doc.add_paragraph("\nCE İlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.").runs[0].bold = True
+    doc.add_paragraph("\n İlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.").runs[0].bold = True
     doc.add_paragraph("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
     
     bio = io.BytesIO()
@@ -447,7 +447,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     pdf.ln(10)
     
     pdf.set_font('Arial', 'B', 8)
-    pdf.cell(0, 4, cevir_tr('CE Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
+    pdf.cell(0, 4, cevir_tr(' Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
     pdf.cell(0, 4, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
     pdf.set_font('Arial', '', 8)
     pdf.cell(0, 4, cevir_tr('Bahcelievler Mah Sehit Fethi Cad. Duygu Sokak No.3 Ic Kapi No. 7'), 0, 1, 'L')
