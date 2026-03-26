@@ -296,6 +296,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
+                    # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
                     if os.path.exists("ust_bar.png"):
                         self.image("ust_bar.png", x=0, y=0, w=210)
                         self.set_y(80) 
@@ -326,10 +327,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     
     pdf.set_draw_color(0, 0, 0) 
     
-    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        pdf.set_fill_color(255, 255, 255) 
-    else:
-        pdf.set_fill_color(245, 245, 235) 
+    # PDF TABLO BAŞLIĞI ARKA PLAN RENGİ (Sadece PDF'te Beyaz)
+    pdf.set_fill_color(255, 255, 255) 
         
     pdf.set_font('Arial', 'B', 9)
     for idx, header in enumerate(headers):
@@ -359,26 +358,26 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             pdf.cell(widths[c_idx+1], 8, yazilacak, 1, align=align, fill=True)
         pdf.ln()
         
-    w_empty = sum(widths[:-2]) if len(widths) > 2 else 110
-    w_label = widths[-2] if len(widths) > 2 else 45
+    # --- TAŞMA SORUNU ÇÖZÜLEN TOPLAM ALANI ---
     w_val = widths[-1]
+    w_label = 40  # GENEL TOPLAM yazısının sığması için garanti genişlik
+    w_empty = sum(widths) - w_val - w_label
     
     pdf.set_font('Arial', '', 9)
     pdf.cell(w_empty, 8, '', 0, 0)
-    pdf.cell(w_label, 8, 'Ara Toplam' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'TOTAL PRICE', 1, 0, 'L')
+    pdf.cell(w_label, 8, 'Ara Toplam' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'TOTAL PRICE', 1, 0, 'R')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, a_str, 1, 1, 'R')
     
     pdf.set_font('Arial', '', 9)
     pdf.cell(w_empty, 8, '', 0, 0)
-    pdf.cell(w_label, 8, 'KDV % 20' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'L')
+    pdf.cell(w_label, 8, 'KDV % 20' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'R')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, k_str, 1, 1, 'R')
     
-    pdf.set_font('Arial', '', 9)
-    pdf.cell(w_empty, 8, '', 0, 0)
-    pdf.cell(w_label, 8, 'GENEL TOPLAM' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'GRAND TOTAL', 1, 0, 'L')
     pdf.set_font('Arial', 'B', 9)
+    pdf.cell(w_empty, 8, '', 0, 0)
+    pdf.cell(w_label, 8, 'GENEL TOPLAM' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'GRAND TOTAL', 1, 0, 'R')
     pdf.cell(w_val, 8, g_str, 1, 1, 'R')
     
     pdf.ln(10)
@@ -391,6 +390,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     wb = Workbook()
     ws = wb.active
     ws.title = "Belge"
+    ws.sheet_view.showGridLines = True
     
     row_idx = 1
     birim_sutun = get_birim_col(dataframe.columns)
@@ -417,7 +417,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # FATURA İÇİN EXCEL (Izgaralar kalır, görsel ve metinler büyütülerek yerleştirilir)
         resim_yolu = None
         if os.path.exists("excel_ust_bar.png"):
             resim_yolu = "excel_ust_bar.png"
@@ -430,7 +429,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             img.width = 700
             img.height = int(img.height * oran)
             ws.add_image(img, 'A1')
-            row_idx = 12 # Resmin altından 12. satırdan başlayalım
+            row_idx = 12 
         else:
             ws[f'A1'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
             ws[f'A1'].font = Font(bold=True, size=14)
@@ -443,7 +442,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         if tarih_sutun < 4:
             tarih_sutun = 4
             
-        # KANKA: 12, 13, 14. satırlar tam dolacak ve büyük fontlu olacak
         ws.cell(row=row_idx, column=1).value = "Fatura Kesilen:"
         ws.cell(row=row_idx, column=1).font = Font(bold=True, size=14) 
         ws.cell(row=row_idx, column=tarih_sutun).value = "Fatura Numarası: ........................"
@@ -461,7 +459,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=1).value = "Adres: ........................................................................"
         ws.cell(row=row_idx, column=1).font = Font(size=12)
         
-        row_idx += 2 # Tabloya geçmeden boşluk bırak, 16. satırdan başlasın
+        row_idx += 2 
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     set_excel_col_widths(ws, headers)
