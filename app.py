@@ -15,32 +15,42 @@ st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_s
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
 
-secilen_tarih = st.date_input("Teklif Tarihi Belirle", datetime.date.today())
+# --- ÜST PANEL: TARİH VE SÜTUN İSİMLERİ ---
+col_t, col_h1, col_h2, col_h3 = st.columns([1, 1, 1, 1])
+secilen_tarih = col_t.date_input("Teklif Tarihi", datetime.date.today())
 tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
 dosya_tarihi = secilen_tarih.strftime("%d_%m_%Y")
 
+baslik_1 = col_h1.text_input("1. Sütun Adı", "INSPECTION REMARK")
+baslik_2 = col_h2.text_input("2. Sütun Adı", "UNIT")
+baslik_3 = col_h3.text_input("3. Sütun Adı", "PRICE")
+
 st.info("Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
+# --- VERİ SETİ ---
 if 'veri_df' not in st.session_state:
     data = {
-        'İşlem (INSPECTION REMARK)': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
+        'İşlem': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
         'Birim': ['2 PIECES', '1 SET', '1 SET'],
-        'Fiyat (€)': [40000.0, 12000.0, 0.0]
+        'Fiyat': [40000.0, 12000.0, 0.0]
     }
     st.session_state.veri_df = pd.DataFrame(data)
 
 df = st.session_state.veri_df
 
+# Sütun isimlerini dinamik göster
 duzenlenmis_df = st.data_editor(
     df,
     column_config={
-        "Fiyat (€)": st.column_config.NumberColumn(format="%d €"),
+        "İşlem": st.column_config.TextColumn(baslik_1),
+        "Birim": st.column_config.TextColumn(baslik_2),
+        "Fiyat": st.column_config.NumberColumn(baslik_3, format="%d"),
     },
     num_rows="dynamic",
     use_container_width=True 
 )
 
-ara_toplam = duzenlenmis_df['Fiyat (€)'].sum()
+ara_toplam = duzenlenmis_df['Fiyat'].sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
 
@@ -55,7 +65,26 @@ col_b.metric("KDV (%20)", kdv_str)
 col_c.metric("Genel Toplam", genel_str)
 st.write("---")
 
-def word_olustur(dataframe, a_str, k_str, g_str, tarih):
+# --- ÖZELLEŞTİRİLEBİLİR ALT NOTLAR ---
+st.subheader("📄 Belge Altı Notları")
+varsayilan_not = """* IMPORTANT NOTICE;
+- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.
+
+* REMARKS;
+- DELIVERY TIME FOR THE JOB IS 35 DAYS,
+- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,
+- PAYMENT WILL BE ACCEPTED AS BELOW;
+    - %50 BEFORE WORK BEGINS,
+    - %50 UPON COMPLETION OF THE WORK."""
+
+kullanici_notu = st.text_area("Bu alana yazdığınız her şey tabloların altına eklenecektir:", value=varsayilan_not, height=200)
+
+st.write("---")
+
+# ==========================================
+# WORD OLUŞTURMA MOTORU
+# ==========================================
+def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
     doc = Document()
     
     if os.path.exists("logo.png"):
@@ -88,7 +117,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     table.style = 'Table Grid'
     
     hdr_cells = table.rows[0].cells
-    hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = 'ITEM NO', 'INSPECTION REMARK', 'UNIT', 'PRICE'
+    hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = 'ITEM NO', h1, h2, h3
     for cell in hdr_cells:
         for paragraph in cell.paragraphs:
             for run in paragraph.runs:
@@ -97,9 +126,9 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
         row_cells[0].text = str(index + 1)
-        row_cells[1].text = str(row['İşlem (INSPECTION REMARK)'])
+        row_cells[1].text = str(row['İşlem'])
         row_cells[2].text = str(row['Birim'])
-        fiyat = row['Fiyat (€)']
+        fiyat = row['Fiyat']
         row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
     doc.add_paragraph()
@@ -114,11 +143,9 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].runs[0].font.bold = True
                     
-    doc.add_paragraph("\n* IMPORTANT NOTICE;").runs[0].bold = True
-    doc.add_paragraph("- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW\nCOMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.")
-    
-    doc.add_paragraph("\n* REMARKS;").runs[0].bold = True
-    doc.add_paragraph("- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK.")
+    doc.add_paragraph()
+    for satir in notlar.split('\n'):
+        doc.add_paragraph(satir)
     
     doc.add_paragraph("\nCE İlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.").runs[0].bold = True
     doc.add_paragraph("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
@@ -127,7 +154,10 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih):
     doc.save(bio)
     return bio.getvalue()
 
-def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
+# ==========================================
+# EXCEL OLUŞTURMA MOTORU
+# ==========================================
+def excel_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
     wb = Workbook()
     ws = wb.active
     ws.title = "Innomar Teklif"
@@ -167,7 +197,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     ws[f'D{row_idx}'].font = Font(bold=True)
     row_idx += 2
     
-    headers = ['ITEM NO', 'INSPECTION REMARK', 'UNIT', 'PRICE']
+    headers = ['ITEM NO', h1, h2, h3]
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     
     for col_num, header in enumerate(headers, 1):
@@ -179,9 +209,9 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     for index, row in dataframe.iterrows():
         ws.cell(row=row_idx, column=1).value = index + 1
-        ws.cell(row=row_idx, column=2).value = str(row['İşlem (INSPECTION REMARK)'])
+        ws.cell(row=row_idx, column=2).value = str(row['İşlem'])
         ws.cell(row=row_idx, column=3).value = str(row['Birim'])
-        fiyat = row['Fiyat (€)']
+        fiyat = row['Fiyat']
         ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
         
         for i in range(1, 5):
@@ -209,35 +239,23 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih):
     ws.cell(row=row_idx, column=4).border = thin_border
     row_idx += 2
     
-    ws[f'B{row_idx}'] = "* IMPORTANT NOTICE;"
-    ws[f'B{row_idx}'].font = Font(bold=True)
-    row_idx += 1
-    ws[f'B{row_idx}'] = "- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY."
-    row_idx += 2
-    
-    ws[f'B{row_idx}'] = "* REMARKS;"
-    ws[f'B{row_idx}'].font = Font(bold=True)
-    row_idx += 1
-    ws[f'B{row_idx}'] = "- DELIVERY TIME FOR THE JOB IS 35 DAYS,"
-    row_idx += 1
-    ws[f'B{row_idx}'] = "- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,"
-    row_idx += 1
-    ws[f'B{row_idx}'] = "- PAYMENT WILL BE ACCEPTED AS BELOW;"
-    row_idx += 1
-    ws[f'B{row_idx}'] = "    - %50 BEFORE WORK BEGINS,"
-    row_idx += 1
-    ws[f'B{row_idx}'] = "    - %50 UPON COMPLETION OF THE WORK."
+    for satir in notlar.split('\n'):
+        ws[f'B{row_idx}'] = satir
+        row_idx += 1
     
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
 
+# ==========================================
+# PDF OLUŞTURMA MOTORU
+# ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
 
-def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
+def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
     class PDF(FPDF):
         def header(self):
             if self.page_no() == 1:
@@ -282,17 +300,17 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
     pdf.set_draw_color(0, 0, 0)
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(15, 8, 'ITEM NO', 1)
-    pdf.cell(95, 8, 'INSPECTION REMARK', 1)
-    pdf.cell(45, 8, 'UNIT', 1)
-    pdf.cell(35, 8, 'PRICE', 1)
+    pdf.cell(95, 8, cevir_tr(h1), 1)
+    pdf.cell(45, 8, cevir_tr(h2), 1)
+    pdf.cell(35, 8, cevir_tr(h3), 1)
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
     for index, row in dataframe.iterrows():
         pdf.cell(15, 8, str(index + 1), 1)
-        pdf.cell(95, 8, cevir_tr(str(row['İşlem (INSPECTION REMARK)'])), 1)
+        pdf.cell(95, 8, cevir_tr(str(row['İşlem'])), 1)
         pdf.cell(45, 8, cevir_tr(str(row['Birim'])), 1)
-        fiyat = row['Fiyat (€)']
+        fiyat = row['Fiyat']
         pdf.cell(35, 8, f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-", 1)
         pdf.ln()
         
@@ -316,24 +334,9 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     pdf.ln(10)
     
-    pdf.set_font('Arial', 'B', 8)
-    pdf.cell(0, 5, '* IMPORTANT NOTICE;', 0, 1, 'L')
+    # Kullanıcının girdiği notları yazdır
     pdf.set_font('Arial', '', 8)
-    pdf.cell(0, 5, '- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW', 0, 1, 'L')
-    pdf.set_font('Arial', 'B', 8)
-    pdf.cell(0, 5, 'COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.', 0, 1, 'L')
-    pdf.ln(4)
-    
-    pdf.set_font('Arial', 'B', 8)
-    pdf.cell(0, 5, '* REMARKS;', 0, 1, 'L')
-    pdf.set_font('Arial', '', 8)
-    pdf.cell(0, 5, '- DELIVERY TIME FOR THE JOB IS 35 DAYS,', 0, 1, 'L')
-    pdf.cell(0, 5, '- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,', 0, 1, 'L')
-    pdf.cell(0, 5, '- PAYMENT WILL BE ACCEPTED AS BELOW;', 0, 1, 'L')
-    pdf.cell(10, 5, '', 0, 0)
-    pdf.cell(0, 5, '- %50 BEFORE WORK BEGINS,', 0, 1, 'L')
-    pdf.cell(10, 5, '', 0, 0)
-    pdf.cell(0, 5, '- %50 UPON COMPLETION OF THE WORK.', 0, 1, 'L')
+    pdf.multi_cell(0, 5, cevir_tr(notlar))
     
     pdf.ln(10)
     
@@ -350,13 +353,14 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih):
     
     return pdf.output(dest='S').encode('latin-1')
 
+# --- İNDİRME BUTONLARI ---
 st.markdown("### 📥 Çıktı Al")
 
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
