@@ -24,7 +24,7 @@ def cevir_tr(metin):
     return metin
 
 # ==========================================
-# PLATFORM ŞABLON SEÇİCİ
+# PLATFORM ŞABLON SEÇİCİ VE İNCE AYARLAR
 # ==========================================
 st.sidebar.markdown("### ⚙️ Sistem Ayarları")
 secili_sablon = st.sidebar.radio(
@@ -32,8 +32,20 @@ secili_sablon = st.sidebar.radio(
     ["⚓ INNOMAR Özel Teklif", "📄 Standart Proforma Fatura"]
 )
 
-gizle_checkbox = st.sidebar.checkbox("🔒 Birim Fiyatını Çıktılarda Gizle (Sansürle)", value=False, help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu '***' olarak görünür.")
+gizle_checkbox = st.sidebar.checkbox("🔒 Birim Fiyatını Çıktılarda Gizle (Sansürle)", value=False)
 
+with st.sidebar.expander("📐 PDF İnce Ayar (Antet Oturtma)", expanded=True):
+    st.info("Arkaplan resmindeki ikonlara metinleri tam oturtmak için bu ayarları kullanın.")
+    pdf_ust = st.slider("Tablo Üst Boşluğu", 20, 100, 45, help="Üstteki logoya çarpmaması için tabloyu aşağı iter.")
+    pdf_alt = st.slider("Tablo Alt Boşluğu", 20, 100, 45, help="Aşağıdaki yazılara çarpmadan yeni sayfaya geçmesini sağlar.")
+    st.write("---")
+    st.caption("Sağ Alt İletişim Bilgileri Hizalaması:")
+    text_x = st.slider("Sağa/Sola Kaydır (X Ekseni)", 100, 200, 140)
+    adres_y = st.slider("Adres Aşağı/Yukarı (Y)", 200, 290, 255)
+    tel_y = st.slider("Telefon Aşağı/Yukarı (Y)", 200, 290, 268)
+    mail_y = st.slider("Mail/Web Aşağı/Yukarı (Y)", 200, 290, 280)
+
+# --- İLK VERİLER ---
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
     st.session_state.aktif_sablon = secili_sablon
     if secili_sablon == "⚓ INNOMAR Özel Teklif":
@@ -59,6 +71,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
 
 st.markdown(f"<h2 style='text-align: center;'>{secili_sablon.upper()} SİSTEMİ</h2>", unsafe_allow_html=True)
 
+# --- ÜST PANEL ---
 col_t, col_kur = st.columns([1, 1])
 secilen_tarih = col_t.date_input("Belge Tarihi", datetime.date.today())
 tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
@@ -69,6 +82,7 @@ if "Euro" in kur_secimi: sembol, kur_metin = "€", "EURO"
 elif "Dolar" in kur_secimi: sembol, kur_metin = "$", "USD"
 else: sembol, kur_metin = "₺", "TL"
 
+# --- DİNAMİK SÜTUN YÖNETİMİ ---
 st.write("---")
 st.caption("Aşağıdaki kutuya virgülle ayırarak istediğiniz kadar sütun ekleyebilir veya silebilirsiniz. **DİKKAT: Fiyat/tutar sütunu her zaman EN SONDA olmalıdır.**")
 
@@ -94,6 +108,7 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.session_state.veri_df = yeni_df
     st.rerun()
 
+# --- ÇÖKMEYEN TEMİZ VERİ YAPISI ---
 df = st.session_state.veri_df.copy()
 son_sutun = df.columns[-1] 
 
@@ -110,11 +125,11 @@ for col in df.columns[:-1]:
     col_config[col] = st.column_config.TextColumn(col)
 col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {sembol}")
 
-st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Toplam Fiyat kısmını elle giriniz.")
-
+st.info("💡 Toplam Fiyat dahil tüm hesaplamaları kendiniz giriniz. Sistem asla hata vermeyecektir.")
 tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
 duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True, key=tablo_key)
 
+# --- BASİT HESAPLAMALAR ---
 fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
 ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
@@ -138,6 +153,9 @@ if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 st.write("---")
 
+# ==========================================
+# AKILLI HİZALAMA VE GENİŞLİK ALGORİTMALARI
+# ==========================================
 def get_alignment(col_name):
     name = str(col_name).lower()
     if any(x in name for x in ['fiyat', 'price', 'tutar']): return 'R'
@@ -154,7 +172,6 @@ def get_pdf_widths(headers, total_w=190):
         elif any(x in name for x in ['marka']): widths.append(25)
         elif any(x in name for x in ['açıklama', 'remark', 'işlem']): widths.append(60)
         else: widths.append(25)
-    
     scale = total_w / sum(widths) if sum(widths) > 0 else 1
     return [w * scale for w in widths]
 
@@ -176,11 +193,9 @@ def set_excel_col_widths(ws, headers):
 # ==========================================
 # ÇIKTI MOTORLARI
 # ==========================================
-
 def get_birim_col(df_columns):
     for col in df_columns:
-        if "birim fiyat" in str(col).lower():
-            return col
+        if "birim fiyat" in str(col).lower(): return col
     return None
 
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
@@ -193,19 +208,17 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             p_logo = doc.add_paragraph()
             p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_logo.add_run().add_picture("logo.png", width=Cm(6))
-            
         p_info = doc.add_paragraph()
         run_name = p_info.add_run("INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
         run_name.bold = True
         run_name.font.color.rgb = RGBColor(0, 51, 153)
         run_name.font.size = Pt(10)
-        p_info.add_run("Heybeliada Mah. Kılavuz Sokak Zarif Apt. No:16/6 Heybeliada - İSTANBUL\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@innomarin.com | www.innomarin.com").font.size = Pt(9)
+        p_info.add_run("Heybeliada Mah. Kılavuz sokak zarif apt. No:16/6 heybeliada istanbul\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@innomarin.com | www.innomarin.com").font.size = Pt(9)
         doc.add_paragraph("_" * 75)
-        
         p_title = doc.add_paragraph()
         p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}").bold = True
     else:
-        doc.add_paragraph("FİRMA BİLGİLERİ\n(Standart Şablon)").runs[0].bold = True
+        doc.add_paragraph("FİRMA BİLGİLERİ (Antet Önizleme)\n").runs[0].bold = True
         doc.add_paragraph("_" * 75)
         p_title = doc.add_paragraph()
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -216,7 +229,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = 'Table Grid'
-    
     for idx, header in enumerate(headers):
         table.rows[0].cells[idx].text = str(header)
         table.rows[0].cells[idx].paragraphs[0].runs[0].font.bold = True
@@ -228,11 +240,9 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         row_cells = table.add_row().cells
         row_cells[0].text = str(index + 1)
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
         for c_idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
             align = get_alignment(col_name)
-            
             if gizle_aktif and col_name == birim_sutun:
                 row_cells[c_idx+1].text = "***"
                 align = 'C'
@@ -244,23 +254,19 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
                     row_cells[c_idx+1].text = "-NIL-"
             else:
                 row_cells[c_idx+1].text = str(val)
-                
             if align == 'R': row_cells[c_idx+1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
             elif align == 'C': row_cells[c_idx+1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
             
     doc.add_paragraph()
-    
     tot_table = doc.add_table(rows=3, cols=2)
     tot_table.style = 'Table Grid'
     tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
-    
-    tot_table.rows[0].cells[0].text = "TOTAL PRICE" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "ARA TOPLAM"
+    tot_table.rows[0].cells[0].text = "TOTAL PRICE" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "Ara Toplam"
     tot_table.rows[0].cells[1].text = a_str
-    tot_table.rows[1].cells[0].text = "VAT (20%)" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "KDV (20%)"
+    tot_table.rows[1].cells[0].text = "VAT (20%)" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "KDV % 20"
     tot_table.rows[1].cells[1].text = k_str
     tot_table.rows[2].cells[0].text = "GRAND TOTAL" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "GENEL TOPLAM"
     tot_table.rows[2].cells[1].text = g_str
-    
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         row.cells[1].paragraphs[0].runs[0].font.bold = True
@@ -271,7 +277,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         
     doc.add_paragraph("\nİlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT LİMAN A.Ş.").runs[0].bold = True
     doc.add_paragraph("Heybeliada Mah. Kılavuz Sokak Zarif Apt. No:16/6 Heybeliada - İSTANBUL\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@innomarin.com | www.innomarin.com")
-    
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
@@ -281,50 +286,62 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     
     class PDF(FPDF):
         def header(self):
+            # Arka plan resmi varsa TIK diye oturt
+            if os.path.exists("arkaplan.png"):
+                self.image("arkaplan.png", 0, 0, 210, 297)
+            
             if self.page_no() == 1:
-                # --- YENİ ANTETLİ KAĞIT SİSTEMİ ---
-                if os.path.exists("arkaplan.png"):
-                    self.image("arkaplan.png", 0, 0, 210, 297)
-                    self.ln(45) # Logoların altına inmesi için boşluk
-                    if sablon_tipi != "⚓ INNOMAR Özel Teklif":
-                        self.set_font('Arial', 'B', 16)
-                        self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
-                        self.ln(5)
+                # Başlıkları resmin üstüne binen eski sistemi kaldırdık. 
+                # PDF içeriği slider'dan gelen 'pdf_ust' margin değerinden itibaren başlayacak.
+                if sablon_tipi != "⚓ INNOMAR Özel Teklif":
+                    self.set_y(pdf_ust - 15) # Tablodan biraz daha yukarıya başlık at
+                    self.set_font('Arial', 'B', 16)
+                    self.set_text_color(0, 0, 0)
+                    self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
+                    self.set_y(pdf_ust) # Geri yerine dön
                 else:
-                    # Arkaplan yoksa eski klasik düzen çalışır
-                    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-                        if os.path.exists("logo.png"): self.image("logo.png", x=65, y=10, w=80)
-                        self.ln(25)
-                        self.set_font('Arial', 'B', 10)
-                        self.set_text_color(0, 51, 153)
-                        self.cell(0, 5, cevir_tr('INNOMAR MARİNA YAT'), 0, 1, 'L')
-                        self.cell(0, 5, cevir_tr('LİMAN TURİZM İŞLETMECİLİĞİ A.Ş.'), 0, 1, 'L')
-                        self.set_font('Arial', '', 9)
-                        self.set_text_color(0, 0, 0)
-                        self.cell(0, 5, cevir_tr('Heybeliada Mah. Kılavuz Sokak Zarif Apt. No:16/6'), 0, 1, 'L')
-                        self.set_draw_color(0, 51, 153)
-                        self.line(10, self.get_y()+2, 200, self.get_y()+2)
-                        self.ln(10)
-                    else:
-                        self.ln(15)
-                        self.set_font('Arial', 'B', 16)
-                        self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
-                        self.ln(5)
+                    self.set_y(pdf_ust)
             else:
-                self.ln(15)
+                self.set_y(pdf_ust)
+
+        def footer(self):
+            # İNCE AYARLI YENİ FOOTER (Adres İkonlarına Oturtma)
+            if os.path.exists("arkaplan.png"):
+                self.set_font('Arial', '', 8)
+                self.set_text_color(50, 50, 50)
+                
+                # Adres
+                self.set_xy(text_x, adres_y)
+                self.cell(60, 4, cevir_tr('Heybeliada Mah. Kılavuz Sokak'), 0, 1, 'L')
+                self.set_x(text_x)
+                self.cell(60, 4, cevir_tr('Zarif Apt. No:16/6 Heybeliada/İST'), 0, 1, 'L')
+                
+                # Telefon
+                self.set_xy(text_x, tel_y)
+                self.cell(60, 4, 'Phn: (+90) 536 763 1911', 0, 1, 'L')
+                self.set_x(text_x)
+                self.cell(60, 4, 'Mob: (+90) 541 552 1907', 0, 1, 'L')
+                
+                # Mail
+                self.set_xy(text_x, mail_y)
+                self.cell(60, 4, 'info@innomarin.com', 0, 1, 'L')
+                self.set_x(text_x)
+                self.cell(60, 4, 'www.innomarin.com', 0, 1, 'L')
 
     pdf = PDF()
+    # YENİ DİNAMİK MARGİNLER (Kullanıcının slider'ı ile ayarlanır)
+    pdf.set_margins(left=15, top=pdf_ust, right=15)
+    pdf.set_auto_page_break(auto=True, margin=pdf_alt)
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
     
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
+        pdf.cell(60, 10, f'* DATE: {tarih}', 0, 1, 'R')
     else:
         pdf.cell(130, 10, '', 0, 0, 'L') 
-        
-    pdf.cell(60, 10, f'* DATE/TARIH: {tarih}', 0, 1, 'R')
+        pdf.cell(60, 10, f'TARİH: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
@@ -344,16 +361,18 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             align = get_alignment(col_name)
             
             if gizle_aktif and col_name == birim_sutun:
-                pdf.cell(widths[c_idx+1], 8, "***", 1, align='C')
+                yaz_fiyat = "***"
+                align = 'C'
             elif col_name == dataframe.columns[-1]: 
                 try:
                     fiyat = float(str(val).replace(',', '.'))
                     yaz_fiyat = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
                 except:
                     yaz_fiyat = "-NIL-"
-                pdf.cell(widths[c_idx+1], 8, yaz_fiyat, 1, align=align)
             else:
-                pdf.cell(widths[c_idx+1], 8, cevir_tr(str(val)), 1, align=align)
+                yaz_fiyat = "" if str(val) == "nan" else cevir_tr(str(val))
+                
+            pdf.cell(widths[c_idx+1], 8, yaz_fiyat, 1, align=align)
         pdf.ln()
         
     w_empty = sum(widths[:-2]) if len(widths) > 2 else 110
@@ -362,13 +381,13 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     
     pdf.set_font('Arial', '', 9)
     pdf.cell(w_empty, 8, '', 0, 0)
-    pdf.cell(w_label, 8, 'ARA TOPLAM' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'TOTAL PRICE', 1, 0, 'L')
+    pdf.cell(w_label, 8, 'Ara Toplam' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'TOTAL PRICE', 1, 0, 'L')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, a_str, 1, 1, 'R')
     
     pdf.set_font('Arial', '', 9)
     pdf.cell(w_empty, 8, '', 0, 0)
-    pdf.cell(w_label, 8, 'KDV (20%)' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'L')
+    pdf.cell(w_label, 8, 'KDV % 20' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'L')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, k_str, 1, 1, 'R')
     
@@ -381,39 +400,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.ln(10)
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(0, 5, cevir_tr(notlar))
-    
-    # --- SAĞ ALT KÖŞE KOORDİNATLARI (YENİ ARKA PLANA ÖZEL) ---
-    if os.path.exists("arkaplan.png"):
-        pdf.set_font('Arial', '', 8)
-        pdf.set_text_color(50, 50, 50)
-        
-        # Koordinatlarla Oynamak İstersen Buradaki 260, 272 sayılarını değiştirebilirsin.
-        # ADRES HİZASI
-        pdf.set_xy(145, 260)
-        pdf.cell(60, 4, cevir_tr('Heybeliada Mah. Kılavuz Sokak'), 0, 1, 'L')
-        pdf.set_x(145)
-        pdf.cell(60, 4, cevir_tr('Zarif Apt. No:16/6 Heybeliada/İST'), 0, 1, 'L')
-        
-        # TELEFON HİZASI
-        pdf.set_xy(145, 272)
-        pdf.cell(60, 4, 'Phn: (+90) 536 763 1911', 0, 1, 'L')
-        pdf.set_x(145)
-        pdf.cell(60, 4, 'Mob: (+90) 541 552 1907', 0, 1, 'L')
-        
-        # MAİL/WEB HİZASI
-        pdf.set_xy(145, 282)
-        pdf.cell(60, 4, 'info@innomarin.com', 0, 1, 'L')
-        pdf.set_x(145)
-        pdf.cell(60, 4, 'www.innomarin.com', 0, 1, 'L')
-    else:
-        pdf.ln(10)
-        pdf.set_font('Arial', 'B', 8)
-        pdf.cell(0, 4, cevir_tr('İlker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT LİMAN A.Ş.'), 0, 1, 'L')
-        pdf.set_font('Arial', '', 8)
-        pdf.cell(0, 4, cevir_tr('Heybeliada Mah. Kılavuz Sokak Zarif Apt. No:16/6 Heybeliada - İSTANBUL'), 0, 1, 'L')
-        pdf.cell(0, 4, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
-        pdf.set_text_color(0, 51, 153)
-        pdf.cell(0, 4, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -453,10 +439,8 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     
-    headers = ['SIRA' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
-    
+    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     set_excel_col_widths(ws, headers)
-    
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
@@ -477,7 +461,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         cell.value = index + 1
         cell.border = thin_border
         cell.alignment = Alignment(horizontal="center")
-        
         for c_idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
             cell = ws.cell(row=row_idx, column=c_idx+2)
@@ -499,18 +482,17 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
                 elif align == 'C': cell.alignment = Alignment(horizontal="center")
                 else: cell.alignment = Alignment(horizontal="left")
             else:
-                cell.value = str(val)
+                cell.value = str(val) if str(val) != "nan" else ""
                 if align == 'R': cell.alignment = Alignment(horizontal="right")
                 elif align == 'C': cell.alignment = Alignment(horizontal="center")
                 else: cell.alignment = Alignment(horizontal="left")
-                
             cell.border = thin_border
         row_idx += 1
         
     tot_col = len(dataframe.columns)
     val_col = len(dataframe.columns) + 1
     
-    ws.cell(row=row_idx, column=tot_col).value = "ARA TOPLAM" if sablon_tipi != "⚓ INNOMAR Özel Teklif" else "TOTAL PRICE"
+    ws.cell(row=row_idx, column=tot_col).value = "Ara Toplam" if sablon_tipi != "⚓ INNOMAR Özel Teklif" else "TOTAL PRICE"
     ws.cell(row=row_idx, column=tot_col).border = thin_border
     ws.cell(row=row_idx, column=val_col).value = a_str
     ws.cell(row=row_idx, column=val_col).font = Font(bold=True)
@@ -518,7 +500,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     ws.cell(row=row_idx, column=val_col).alignment = Alignment(horizontal="right")
     row_idx += 1
     
-    ws.cell(row=row_idx, column=tot_col).value = "KDV (20%)"
+    ws.cell(row=row_idx, column=tot_col).value = "KDV % 20" if sablon_tipi != "⚓ INNOMAR Özel Teklif" else "VAT (20%)"
     ws.cell(row=row_idx, column=tot_col).border = thin_border
     ws.cell(row=row_idx, column=val_col).value = k_str
     ws.cell(row=row_idx, column=val_col).font = Font(bold=True)
@@ -537,6 +519,14 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     for satir in notlar.split('\n'):
         ws[f'B{row_idx}'] = satir
         row_idx += 1
+        
+    if sablon_tipi != "⚓ INNOMAR Özel Teklif":
+        row_idx += 2
+        ws[f'C{row_idx}'] = "FİRMA LOGOSU"
+        ws[f'C{row_idx}'].font = Font(bold=True)
+        row_idx += 1
+        ws[f'C{row_idx}'] = "VE BİLGİLERİ"
+        ws[f'C{row_idx}'].font = Font(bold=True)
         
     output = io.BytesIO()
     wb.save(output)
