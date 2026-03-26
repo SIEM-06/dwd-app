@@ -21,7 +21,6 @@ secili_sablon = st.sidebar.radio(
     ["⚓ INNOMAR Özel Teklif", "📄 Standart Proforma Fatura"]
 )
 
-# Şablon değiştiğinde verileri o şablona uygun sıfırlama mekanizması
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
     st.session_state.aktif_sablon = secili_sablon
     if secili_sablon == "⚓ INNOMAR Özel Teklif":
@@ -31,7 +30,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
             'PRICE': [40000.0, 12000.0]
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED...\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS..."
-    else: # Proforma Fatura
+    else: 
         data = {
             'Marka': ['Örnek Marka', ''],
             'Açıklama': ['Örnek Açıklama', ''],
@@ -126,12 +125,132 @@ if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
 st.write("---")
 
 # ==========================================
-# ORTAK ÇIKTI MOTORLARI (ŞABLONA GÖRE ADAPTE OLUR)
+# ÇIKTI MOTORLARI
 # ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
+
+def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi):
+    doc = Document()
+    
+    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        if os.path.exists("logo.png"):
+            p_logo = doc.add_paragraph()
+            p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r_logo = p_logo.add_run()
+            r_logo.add_picture("logo.png", width=Cm(6))
+            
+        p_info = doc.add_paragraph()
+        run_name = p_info.add_run("INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
+        run_name.bold = True
+        run_name.font.color.rgb = RGBColor(0, 51, 153)
+        run_name.font.size = Pt(10)
+        
+        run_addr = p_info.add_run("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
+        run_addr.font.size = Pt(9)
+        doc.add_paragraph("_" * 75)
+        
+        p_title = doc.add_paragraph()
+        run_title = p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}")
+        run_title.bold = True
+        run_title.font.size = Pt(10)
+    else:
+        # PROFORMA WORD BAŞLIĞI
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_title = p_title.add_run("PROFORMA FATURA")
+        run_title.bold = True
+        run_title.font.size = Pt(16)
+        
+        doc.add_paragraph()
+        
+        p_date = doc.add_paragraph()
+        p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        run_date = p_date.add_run(f"TARİH: {tarih}")
+        run_date.bold = True
+    
+    table = doc.add_table(rows=1, cols=len(dataframe.columns) + 1)
+    table.style = 'Table Grid'
+    
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'ITEM NO' if sablon_tipi == "⚓ INNOMAR Özel Teklif" else 'SIRA'
+    for idx, col_name in enumerate(dataframe.columns):
+        hdr_cells[idx+1].text = str(col_name)
+        
+    for cell in hdr_cells:
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.font.bold = True
+    
+    for index, row in dataframe.iterrows():
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(index + 1)
+        for idx, col_name in enumerate(dataframe.columns):
+            val = row[col_name]
+            if col_name == dataframe.columns[-1]: 
+                fiyat = pd.to_numeric(val, errors='coerce')
+                if pd.isna(fiyat) or fiyat <= 0:
+                    row_cells[idx+1].text = "-NIL-"
+                else:
+                    row_cells[idx+1].text = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+            else:
+                row_cells[idx+1].text = str(val)
+                
+    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        mid_cols = dataframe.columns[:-1]
+        w_mids = []
+        if len(mid_cols) == 1: w_mids = [14.0]
+        elif len(mid_cols) == 2: w_mids = [9.5, 4.5]
+        else:
+            w_first = 14.0 - (len(mid_cols)-1)*3.0
+            w_mids = [w_first] + [3.0]*(len(mid_cols)-1)
+            
+        widths = [Cm(1.5)] + [Cm(w) for w in w_mids] + [Cm(3.5)]
+        for row in table.rows:
+            for idx, width in enumerate(widths):
+                row.cells[idx].width = width
+            
+    doc.add_paragraph()
+    
+    tot_table = doc.add_table(rows=3, cols=2)
+    tot_table.style = 'Table Grid'
+    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
+    
+    tot_table.rows[0].cells[0].text = "TOTAL PRICE" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "ARA TOPLAM"
+    tot_table.rows[0].cells[1].text = a_str
+    tot_table.rows[1].cells[0].text = "VAT (20%)" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "KDV (20%)"
+    tot_table.rows[1].cells[1].text = k_str
+    tot_table.rows[2].cells[0].text = "GRAND TOTAL" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "GENEL TOPLAM"
+    tot_table.rows[2].cells[1].text = g_str
+    
+    for row in tot_table.rows:
+        row.cells[1].paragraphs[0].runs[0].font.bold = True
+        
+    tot_widths = [Cm(4.5), Cm(3.5)]
+    for row in tot_table.rows:
+        for idx, width in enumerate(tot_widths):
+            row.cells[idx].width = width
+                    
+    doc.add_paragraph()
+    for satir in notlar.split('\n'):
+        doc.add_paragraph(satir)
+        
+    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        doc.add_paragraph("\nCE İlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.").runs[0].bold = True
+        doc.add_paragraph("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
+    else:
+        doc.add_paragraph()
+        if os.path.exists("logo.png"):
+            p_logo = doc.add_paragraph()
+            r_logo = p_logo.add_run()
+            r_logo.add_picture("logo.png", width=Cm(4))
+        doc.add_paragraph("FİRMA BİLGİLERİ").runs[0].bold = True
+    
+    bio = io.BytesIO()
+    doc.save(bio)
+    return bio.getvalue()
 
 def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi):
     class PDF(FPDF):
@@ -157,7 +276,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
-                    # PROFORMA BAŞLIĞI
                     self.set_font('Arial', 'B', 16)
                     self.cell(0, 15, 'PROFORMA FATURA', 0, 1, 'C')
                     self.ln(5)
@@ -176,12 +294,11 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
     else:
-        pdf.cell(130, 10, '', 0, 0, 'L') # Proformada sol taraf boş
+        pdf.cell(130, 10, '', 0, 0, 'L') 
         
     pdf.cell(60, 10, f'* DATE/TARIH: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
-    # Dinamik Sütun Çizimi
     cols = list(dataframe.columns)
     mid_cols = cols[:-1]
     last_col = cols[-1]
@@ -239,7 +356,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         pdf.cell(0, 4, cevir_tr('Bahcelievler Mah Sehit Fethi Cad. Duygu Sokak No.3 Ic Kapi No. 7'), 0, 1, 'L')
         pdf.cell(0, 4, 'Pendik - ISTANBUL/TURKEY', 0, 1, 'L')
     else:
-        # PROFORMA ALTI: Logo ve Bilgiler
         if os.path.exists("logo.png"):
             pdf.image("logo.png", x=10, y=pdf.get_y(), w=30)
             pdf.set_x(45)
@@ -337,9 +453,9 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
+with btn_word:
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
     st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
     st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
-with btn_word:
-    st.info("Word formatı şu an sadece INNOMAR şablonunda destekleniyor. Proforma için PDF/Excel kullanın.")
