@@ -34,7 +34,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
-        # KANKA BURASI SENİN BEJ TABLONA UYGUN YENİ SÜTUN YERLEŞİMİ
+        # KANKA BURASI FATURA SÜTUNLARI
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
             'Birim Fiyatı': ['1000', '500'],
@@ -42,7 +42,8 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
             'KDV': ['%20', '%20'],
             'Tutar': [1000.0, 1000.0]
         }
-        st.session_state.not_alani = "Banka Hesap Bilgilerimiz:\nBanka Adı: \nIBAN: \nHesap Sahibi: "
+        # Fatura için not alanı tamamen boş başlatılır
+        st.session_state.not_alani = "" 
     
     st.session_state.veri_df = pd.DataFrame(data)
     st.rerun()
@@ -120,9 +121,10 @@ col_c.metric("Genel Toplam", genel_str)
 st.write("---")
 
 st.subheader("📄 Belge Altı Notları")
-st.text_area("Bu alana yazdığınız metin belgenin altına eklenecektir:", key="not_alani", height=150)
+# Faturadaysa silik metin olarak uyarı verir, teklifteyse direkt dolu gelir
+st.text_area("Bu alana yazdığınız metin belgenin altına eklenecektir:", key="not_alani", height=150, placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz...")
 
-if st.button("🔄 Notları Sisteme Kaydet"):
+if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 st.write("---")
 
@@ -295,14 +297,15 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.set_text_color(0, 51, 153)
                     self.cell(0, 5, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
                     self.set_draw_color(0, 51, 153)
+                    self.set_line_width(0.3)
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
                     # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
                     if os.path.exists("ust_bar.png"):
-                        # A4 genişliği 210mm'dir. Sıfırdan sıfıra resmi tam oturturuz.
+                        # A4 genişliği 210mm'dir.
                         self.image("ust_bar.png", x=0, y=0, w=210)
-                        self.set_y(65) # Logonun yüksekliğine göre tabloyu aşağı iter (gerekirse burayı artırabilirsin)
+                        self.set_y(65) # Üst logodan tabloya kadar inmesi gereken pay
                     else:
                         self.set_font('Arial', 'B', 12)
                         self.set_text_color(0, 0, 0)
@@ -328,22 +331,21 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
     widths = get_pdf_widths(headers)
     
-    # --- KANKA BEJ RENKLİ TABLO BAŞLIĞI BURASI ---
-    pdf.set_draw_color(0, 0, 0) # Siyah ince sınır çizgileri
+    pdf.set_draw_color(0, 0, 0)
     
+    # --- BEJ RENKLİ TABLO BAŞLIĞI ---
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        pdf.set_fill_color(255, 255, 255) # Teklif için normal beyaz
+        pdf.set_fill_color(255, 255, 255) # Normal beyaz
     else:
-        pdf.set_fill_color(245, 245, 235) # Fatura İçin Orijinal Bej (Krem) Rengi
+        pdf.set_fill_color(235, 228, 213) # Fatura İçin Şık Bej/Krem Rengi
         
     pdf.set_font('Arial', 'B', 9)
     for idx, header in enumerate(headers):
-        # fill=True diyerek arka plan rengini boyuyoruz
-        pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, align='C', fill=True) 
+        pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, align='C', fill=True)
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
-    pdf.set_fill_color(255, 255, 255) # Alt satırlar tekrar beyaz olacak
+    pdf.set_fill_color(255, 255, 255) # Sütun içleri beyaz
     for index, row in dataframe.iterrows():
         pdf.cell(widths[0], 8, str(index + 1), 1, align='C', fill=True)
         for c_idx, col_name in enumerate(dataframe.columns):
@@ -426,7 +428,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         if os.path.exists("ust_bar.png"):
             img = xlImage("ust_bar.png")
             ws.add_image(img, 'A1')
-            row_idx = 14 # Logodan sonra tabloya kadar inmesi gereken satır payı
+            row_idx = 14 # Fotoğraftan sonra tabloya kadar bırakılan boşluk
         else:
             ws[f'B{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (ust_bar.png ekleyin)"
             ws[f'B{row_idx}'].font = Font(bold=True, size=14)
@@ -444,11 +446,11 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     
-    # --- KANKA BEJ RENKLİ TABLO BAŞLIĞI (EXCEL İÇİN) ---
+    # --- BEJ RENKLİ TABLO BAŞLIĞI (EXCEL İÇİN) ---
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") # Teklif için standart gri
+        bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") # Standart gri
     else:
-        bg_fill = PatternFill(start_color="F5F5EB", end_color="F5F5EB", fill_type="solid") # Fatura için krem/bej rengi
+        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") # Kurumsal Krem/Bej rengi
         
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
