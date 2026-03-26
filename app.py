@@ -15,6 +15,7 @@ from openpyxl.drawing.image import Image as xlImage
 
 st.set_page_config(layout="wide", page_title="Doküman Oluşturucu Platform", initial_sidebar_state="expanded")
 
+# --- PLATFORM ŞABLON SEÇİCİ ---
 st.sidebar.markdown("### ⚙️ Sistem Ayarları")
 secili_sablon = st.sidebar.radio(
     "📝 Çalışma Şablonunu Seçin:",
@@ -48,6 +49,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
 
 st.markdown(f"<h2 style='text-align: center;'>{secili_sablon.upper()} SİSTEMİ</h2>", unsafe_allow_html=True)
 
+# --- ÜST PANEL: TARİH VE PARA BİRİMİ ---
 col_t, col_kur = st.columns([1, 1])
 
 secilen_tarih = col_t.date_input("Belge Tarihi", datetime.date.today())
@@ -59,6 +61,7 @@ if "Euro" in kur_secimi: sembol, kur_metin = "€", "EURO"
 elif "Dolar" in kur_secimi: sembol, kur_metin = "$", "USD"
 else: sembol, kur_metin = "₺", "TL"
 
+# --- DİNAMİK SÜTUN YÖNETİMİ ---
 st.write("---")
 st.caption("Aşağıdaki kutuya virgülle ayırarak istediğiniz kadar sütun ekleyebilir veya silebilirsiniz. **DİKKAT: Hesaplamaların doğru çalışması için fiyat/tutar sütunu her zaman EN SONDA olmalıdır.**")
 
@@ -73,58 +76,43 @@ if len(yeni_sutunlar) < 2:
     yeni_sutunlar = st.session_state.veri_df.columns.tolist()
 
 if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
-    eski_df = st.session_state.veri_df.copy()
+    eski_df = st.session_state.veri_df
     yeni_df = pd.DataFrame(columns=yeni_sutunlar)
     for col in yeni_sutunlar:
         if col in eski_df.columns:
             yeni_df[col] = eski_df[col]
         else:
-            yeni_df[col] = "" 
+            yeni_df[col] = None 
             
+    son_sutun_adi = yeni_sutunlar[-1]
+    yeni_df[son_sutun_adi] = pd.to_numeric(yeni_df[son_sutun_adi], errors='coerce').fillna(0.0)
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-# --- ZIRHLI VERİ TİPİ KORUMASI ---
-df = st.session_state.veri_df.copy()
+# --- ESKİ STABİL ÇÖKMEZ YAPI ---
+df = st.session_state.veri_df
 son_sutun = df.columns[-1] 
+df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
 
-for col in df.columns:
-    if col == son_sutun or str(col).strip() in ["Adet", "Birim Fiyat"]:
-        # Virgülleri noktaya çevir, zorla sayı yap (Float)
-        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
-    else:
-        # Geri kalanlar kesinlikle metin olmalı
-        df[col] = df[col].astype(str)
-        df[col] = df[col].apply(lambda x: "" if str(x).lower() in ['nan', 'none', '<na>'] else x)
-
-st.session_state.veri_df = df
-
-col_config = {}
-for col in df.columns[:-1]:
-    if str(col).strip() in ["Adet", "Birim Fiyat"]:
-        col_config[col] = st.column_config.NumberColumn(col)
-    else:
-        col_config[col] = st.column_config.TextColumn(col)
-col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {sembol}")
+col_config = {
+    son_sutun: st.column_config.NumberColumn(son_sutun, format=f"%d {sembol}")
+}
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
-duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True, key=tablo_key)
+duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True)
 
-# --- ÇÖKMEZ MATEMATİK MOTORU ---
+# --- ARKA PLANDA GİZLİ MATEMATİK MOTORU ---
 if "Adet" in duzenlenmis_df.columns and "Birim Fiyat" in duzenlenmis_df.columns:
-    # Sayıları zorla float (ondalıklı sayı) formatına alıyoruz ki çarparken 'metin' hatası vermesin
-    adet_val = pd.to_numeric(duzenlenmis_df["Adet"].astype(str).str.replace(',', '.'), errors='coerce').fillna(1.0).astype(float)
-    birim_val = pd.to_numeric(duzenlenmis_df["Birim Fiyat"].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0).astype(float)
-    
+    adet_val = pd.to_numeric(duzenlenmis_df["Adet"].astype(str).str.replace(',', '.'), errors='coerce').fillna(1.0)
+    birim_val = pd.to_numeric(duzenlenmis_df["Birim Fiyat"].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     duzenlenmis_df[son_sutun] = adet_val * birim_val
-    st.caption("⚡ 'Adet' ve 'Birim Fiyat' bulundu. Toplam Fiyat otomatik olarak çarpılıp hesaplandı.")
+    st.caption("⚡ Çıktılarda ve aşağıdaki hesaplamalarda Toplam Fiyat otomatik olarak hesaplandı.")
 else:
-    duzenlenmis_df[son_sutun] = pd.to_numeric(duzenlenmis_df[son_sutun].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0).astype(float)
+    duzenlenmis_df[son_sutun] = pd.to_numeric(duzenlenmis_df[son_sutun].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
 
 # --- HESAPLAMALAR ---
-fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0.0)
+fiyatlar = duzenlenmis_df[son_sutun]
 ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
@@ -147,6 +135,9 @@ if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 st.write("---")
 
+# ==========================================
+# AKILLI HİZALAMA VE GENİŞLİK ALGORİTMALARI
+# ==========================================
 def get_alignment(col_name):
     name = str(col_name).lower()
     if any(x in name for x in ['fiyat', 'price', 'tutar']): return 'R'
@@ -182,6 +173,9 @@ def set_excel_col_widths(ws, headers):
         else:
             ws.column_dimensions[col_letter].width = 20
 
+# ==========================================
+# ÇIKTI MOTORLARI
+# ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
