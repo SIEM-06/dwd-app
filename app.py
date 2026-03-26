@@ -59,17 +59,15 @@ if "Euro" in kur_secimi: sembol, kur_metin = "€", "EURO"
 elif "Dolar" in kur_secimi: sembol, kur_metin = "$", "USD"
 else: sembol, kur_metin = "₺", "TL"
 
-# --- TABLO DÜZENLEME VE HATA GİDERME ---
+# --- TABLO DÜZENLEME ---
 df = st.session_state.veri_df.copy()
 son_sutun = df.columns[-1] 
-
-# Sayısal sütunları temizle
 df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
 
 col_config = {son_sutun: st.column_config.NumberColumn(son_sutun, format=f"%d {sembol}")}
 duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True)
 
-# HATA ÇÖZÜMÜ: İndeksleri sıfırla ki KeyError: 0 hatası vermesin
+# İndeksleri sıfırla
 duzenlenmis_df = duzenlenmis_df.reset_index(drop=True)
 
 # --- HESAPLAMALAR ---
@@ -99,9 +97,9 @@ def cevir_tr(metin):
     for k, v in tr_map.items(): metin = (str(metin)).replace(k, v)
     return metin
 
-def get_birim_col(cols):
-    for c in cols:
-        if "birim fiyat" in str(c).lower(): return c
+def get_birim_col_index(cols):
+    for i, c in enumerate(cols):
+        if "birim fiyat" in str(c).lower(): return i
     return None
 
 # ==========================================
@@ -112,16 +110,18 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, sablon, gizle):
     wb = Workbook()
     ws = wb.active
     ws.sheet_view.showGridLines = False
-    birim_sutun = get_birim_col(dataframe.columns)
     
-    # Fatura taslağına göre başlık 7. satırda
+    birim_idx = get_birim_col_index(dataframe.columns)
+    
+    # Başlık yerleşimi
     row_idx = 7 if "Fatura" in sablon else 9
     ws.cell(row=row_idx, column=1).value = "PROFORMA FATURA" if "Fatura" in sablon else "ÖZEL TEKLİF"
     ws.cell(row=row_idx, column=1).font = Font(bold=True, size=14)
     ws.cell(row=row_idx+1, column=len(dataframe.columns)).value = "TARİH:"
     ws.cell(row=row_idx+1, column=len(dataframe.columns)+1).value = tarih
     
-    row_idx = 10 # Tablo başlangıcı
+    # Tablo Başlıkları
+    row_idx = 10
     headers = ['Sıra'] + list(dataframe.columns)
     gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
@@ -136,13 +136,19 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, sablon, gizle):
     for i, row in dataframe.iterrows():
         ws.cell(row=row_idx, column=1).value = i + 1
         ws.cell(row=row_idx, column=1).border = border
-        for c_idx, cname in enumerate(dataframe.columns, 2):
-            val = row[cname-2]
-            if gizle and cname-2 == birim_sutun: val = "***"
-            elif cname-2 == dataframe.columns[-1]:
-                try: val = f"{float(val):,.0f} {kur_metin}"
-                except: val = str(val)
-            cell = ws.cell(row=row_idx, column=c_idx, value=str(val))
+        
+        for c_idx, val in enumerate(row, 2):
+            # Sansürleme Kontrolü
+            if gizle and birim_idx is not None and (c_idx-2) == birim_idx:
+                final_val = "***"
+            # En son sütun (Fiyat) Kontrolü
+            elif (c_idx-2) == len(dataframe.columns) - 1:
+                try: final_val = f"{float(val):,.0f} {kur_metin}"
+                except: final_val = str(val)
+            else:
+                final_val = str(val)
+            
+            cell = ws.cell(row=row_idx, column=c_idx, value=final_val)
             cell.border = border; cell.alignment = Alignment(horizontal="center")
         row_idx += 1
 
@@ -160,7 +166,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, sablon, gizle):
     return output.getvalue()
 
 def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon, gizle):
-    birim_sutun = get_birim_col(dataframe.columns)
+    birim_idx = get_birim_col_index(dataframe.columns)
     class PDF(FPDF):
         def header(self):
             if os.path.exists("arkaplan.png"): self.image("arkaplan.png", 0, 0, 210, 297)
@@ -183,13 +189,13 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon, gi
     pdf.set_font('Arial', '', 8)
     for i, row in dataframe.iterrows():
         pdf.cell(w, 7, str(i+1), 1, 0, 'C')
-        for cname in dataframe.columns:
-            val = row[cname]
-            if gizle and cname == birim_sutun: val = "***"
-            elif cname == dataframe.columns[-1]:
-                try: val = f"{float(val):,.0f} {kur_metin}"
-                except: val = str(val)
-            pdf.cell(w, 7, cevir_tr(str(val)), 1, 0, 'C')
+        for idx, val in enumerate(row):
+            if gizle and idx == birim_idx: text = "***"
+            elif idx == len(dataframe.columns) - 1:
+                try: text = f"{float(val):,.0f} {kur_metin}"
+                except: text = str(val)
+            else: text = str(val)
+            pdf.cell(w, 7, cevir_tr(text), 1, 0, 'C')
         pdf.ln()
     
     pdf.set_font('Arial', 'B', 9)
@@ -202,7 +208,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon, gi
 
 def word_olustur(dataframe, g_str, tarih, sablon, gizle):
     doc = Document()
-    birim_sutun = get_birim_col(dataframe.columns)
+    birim_idx = get_birim_col_index(dataframe.columns)
     doc.add_paragraph("\n" * 6)
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -216,13 +222,13 @@ def word_olustur(dataframe, g_str, tarih, sablon, gizle):
     for i, row in dataframe.iterrows():
         cells = table.add_row().cells
         cells[0].text = str(i+1)
-        for c_idx, cname in enumerate(dataframe.columns, 1):
-            val = row[cname-1]
-            if gizle and cname-1 == birim_sutun: val = "***"
-            elif cname-1 == dataframe.columns[-1]:
-                try: val = f"{float(val):,.0f} {kur_metin}"
-                except: val = str(val)
-            cells[c_idx].text = str(val)
+        for idx, val in enumerate(row):
+            if gizle and idx == birim_idx: final_text = "***"
+            elif idx == len(dataframe.columns) - 1:
+                try: final_text = f"{float(val):,.0f} {kur_metin}"
+                except: final_text = str(val)
+            else: final_text = str(val)
+            cells[idx+1].text = final_text
             
     doc.add_paragraph(f"\nGENEL TOPLAM: {g_str}")
     doc.add_paragraph(f"\nNotlar:\n{st.session_state.not_alani}")
@@ -232,7 +238,7 @@ def word_olustur(dataframe, g_str, tarih, sablon, gizle):
 
 # --- BUTONLAR ---
 st.markdown("### 📥 Çıktıları Al")
-btn_excel, btn_word, btn_pdf = st.columns(3)
-with btn_excel: st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, secili_sablon, gizle_checkbox), file_name=f"Innomar_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
-with btn_word: st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, genel_str, tarih_metni, secili_sablon, gizle_checkbox), file_name=f"Innomar_{dosya_tarihi}.docx", type="primary", use_container_width=True)
-with btn_pdf: st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox), file_name=f"Innomar_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+c1, c2, c3 = st.columns(3)
+with c1: st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, secili_sablon, gizle_checkbox), file_name=f"Innomar_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+with c2: st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, genel_str, tarih_metni, secili_sablon, gizle_checkbox), file_name=f"Innomar_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+with c3: st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox), file_name=f"Innomar_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
