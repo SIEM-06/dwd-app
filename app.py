@@ -18,16 +18,6 @@ st.set_page_config(layout="wide", page_title="Doküman Oluşturucu Platform", in
 # ==========================================
 # ZIRHLI YARDIMCI FONKSİYONLAR
 # ==========================================
-def format_fiyat(val, kur_m):
-    """Hücreye ne girilirse girilsin çökmeyi engelleyen zırhlı fiyat formatlayıcı."""
-    try:
-        fiyat = float(val)
-        if pd.isna(fiyat) or fiyat <= 0:
-            return "-NIL-"
-        return f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
-    except (ValueError, TypeError):
-        return "-NIL-"
-
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
@@ -58,8 +48,8 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
             'Marka': ['Örnek Marka', ''],
             'Açıklama': ['Örnek Açıklama', ''],
             'KDV': ['%20', ''],
-            'Adet': [1.0, 2.0],
-            'Birim Fiyat': [1000.0, 500.0],
+            'Adet': ['1', '2'],
+            'Birim Fiyat': ['1000', '500'],
             'Toplam Fiyat': [1000.0, 1000.0]
         }
         st.session_state.not_alani = "Banka Hesap Bilgilerimiz:\nBanka Adı: \nIBAN: \nHesap Sahibi: INNOMAR MARİNA YAT LİMAN A.Ş."
@@ -105,46 +95,33 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-# --- VERİ TİPİ DÜZENLEME ALANI ---
+# --- VERİ TİPİ DÜZENLEME ALANI (SADELEŞTİRİLMİŞ STABİL YAPI) ---
 df = st.session_state.veri_df.copy()
 son_sutun = df.columns[-1] 
-birim_sutunu = next((c for c in df.columns if str(c).strip().lower() in ["birim fiyat", "birim fiyatı"]), None)
-adet_sutunu = next((c for c in df.columns if str(c).strip().lower() in ["adet", "miktar"]), None)
 
 for col in df.columns:
-    if col == son_sutun or col in [adet_sutunu, birim_sutunu]:
+    if col == son_sutun:
+        # Sadece son sütun sayıya zorlanır
         df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
     else:
-        df[col] = df[col].astype(str)
-        df[col] = df[col].apply(lambda x: "" if str(x).lower() in ['nan', 'none', '<na>', 'null'] else x)
+        # Geri kalan her şey saf metin
+        df[col] = df[col].astype(str).replace(['nan', 'None', '<NA>', 'NaN'], '')
 
 st.session_state.veri_df = df
 
 col_config = {}
 for col in df.columns[:-1]:
-    if col in [adet_sutunu, birim_sutunu]:
-        col_config[col] = st.column_config.NumberColumn(col)
-    else:
-        col_config[col] = st.column_config.TextColumn(col)
+    col_config[col] = st.column_config.TextColumn(col)
 
 col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {sembol}")
 
-st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
+st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Toplam Fiyat kısmını elle giriniz.")
 
 tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
 duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True, key=tablo_key)
 
-# --- ÇÖKMEZ HESAPLAMA MOTORU ---
-def guvenli_sayi_yap(sutun_verisi):
-    return pd.to_numeric(sutun_verisi.astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
-
-if adet_sutunu and birim_sutunu:
-    duzenlenmis_df[son_sutun] = guvenli_sayi_yap(duzenlenmis_df[adet_sutunu]) * guvenli_sayi_yap(duzenlenmis_df[birim_sutunu])
-    st.caption(f"⚡ '{adet_sutunu}' ve '{birim_sutunu}' çarpılarak Toplam Fiyat otomatik hesaplandı.")
-else:
-    duzenlenmis_df[son_sutun] = guvenli_sayi_yap(duzenlenmis_df[son_sutun])
-
-fiyatlar = guvenli_sayi_yap(duzenlenmis_df[son_sutun])
+# --- BASİT HESAPLAMALAR (ÇÖKMEZ) ---
+fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
 ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
@@ -205,7 +182,7 @@ def set_excel_col_widths(ws, headers):
 # ==========================================
 # ÇIKTI MOTORLARI
 # ==========================================
-def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle, b_sutunu):
+def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle):
     doc = Document()
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     
@@ -253,13 +230,17 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             val = row[col_name]
             align = get_alignment(col_name)
             
-            if gizle and col_name == b_sutunu:
+            if gizle and str(col_name).strip() == "Birim Fiyat":
                 row_cells[c_idx+1].text = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]: 
-                row_cells[c_idx+1].text = format_fiyat(val, kur_m)
+                try:
+                    fiyat = float(str(val).replace(',', '.'))
+                    row_cells[c_idx+1].text = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except:
+                    row_cells[c_idx+1].text = "-NIL-"
             else:
-                row_cells[c_idx+1].text = str(val) if not pd.isna(val) else ""
+                row_cells[c_idx+1].text = str(val) if str(val) != "nan" else ""
                 
             if align == 'R': row_cells[c_idx+1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
             elif align == 'C': row_cells[c_idx+1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -295,7 +276,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     doc.save(bio)
     return bio.getvalue()
 
-def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle, b_sutunu):
+def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle):
     class PDF(FPDF):
         def header(self):
             if self.page_no() == 1:
@@ -355,13 +336,17 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             val = row[col_name]
             align = get_alignment(col_name)
             
-            if gizle and col_name == b_sutunu:
+            if gizle and str(col_name).strip() == "Birim Fiyat":
                 yazilacak_metin = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]: 
-                yazilacak_metin = format_fiyat(val, kur_m)
+                try:
+                    fiyat = float(str(val).replace(',', '.'))
+                    yazilacak_metin = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except:
+                    yazilacak_metin = "-NIL-"
             else:
-                yazilacak_metin = "" if pd.isna(val) else cevir_tr(str(val))
+                yazilacak_metin = "" if str(val) == "nan" else cevir_tr(str(val))
                 
             pdf.cell(widths[c_idx+1], 8, yazilacak_metin, 1, align=align)
         pdf.ln()
@@ -410,7 +395,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     
     return pdf.output(dest='S').encode('latin-1')
 
-def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle, b_sutunu):
+def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle):
     wb = Workbook()
     ws = wb.active
     ws.title = "Belge"
@@ -474,16 +459,23 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             cell = ws.cell(row=row_idx, column=c_idx+2)
             align = get_alignment(col_name)
             
-            if gizle and col_name == b_sutunu:
+            if gizle and str(col_name).strip() == "Birim Fiyat":
                 cell.value = "***"
                 cell.alignment = Alignment(horizontal="center")
             elif col_name == dataframe.columns[-1]: 
-                cell.value = format_fiyat(val, kur_m)
+                try:
+                    fiyat = float(str(val).replace(',', '.'))
+                    if pd.isna(fiyat) or fiyat <= 0:
+                        cell.value = "-NIL-"
+                    else:
+                        cell.value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except:
+                    cell.value = "-NIL-"
                 if align == 'R': cell.alignment = Alignment(horizontal="right")
                 elif align == 'C': cell.alignment = Alignment(horizontal="center")
                 else: cell.alignment = Alignment(horizontal="left")
             else:
-                cell.value = str(val) if not pd.isna(val) else ""
+                cell.value = str(val) if str(val) != "nan" else ""
                 if align == 'R': cell.alignment = Alignment(horizontal="right")
                 elif align == 'C': cell.alignment = Alignment(horizontal="center")
                 else: cell.alignment = Alignment(horizontal="left")
@@ -539,8 +531,8 @@ st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox, birim_sutunu), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox, birim_sutunu), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox, birim_sutunu), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin, secili_sablon, gizle_checkbox), file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
