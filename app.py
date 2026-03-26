@@ -153,7 +153,7 @@ def get_alignment(col_name):
     if any(x in name for x in ['sıra', 'no', 'kdv', 'adet', 'unit']): return 'C'
     return 'L'
 
-def get_pdf_widths(headers, total_w=190):
+def get_pdf_widths(headers, total_w=170): # KANKA BURAYI 190'DAN 170'E DÜŞÜRDÜM, TABLO KÜÇÜLDÜ
     widths = []
     for h in headers:
         name = str(h).lower()
@@ -276,8 +276,9 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     for satir in notlar.split('\n'):
         doc.add_paragraph(satir)
         
-    doc.add_paragraph("\nİlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT LİMAN A.Ş.").runs[0].bold = True
-    doc.add_paragraph("Heybeliada Mah. Kılavuz Sokak Zarif Apt. No:16/6 Heybeliada - İSTANBUL\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@innomarin.com | www.innomarin.com")
+    # WORD İMZA KISMI ŞİMDİLİK İPTAL EDİLDİ
+    # doc.add_paragraph("\nİlker TEKINKAYA | Managing Partner | INNOMAR MARİNA YAT LİMAN A.Ş.").runs[0].bold = True
+    # doc.add_paragraph("Heybeliada Mah. Kılavuz Sokak Zarif Apt. No:16/6 Heybeliada - İSTANBUL\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@innomarin.com | www.innomarin.com")
     
     bio = io.BytesIO()
     doc.save(bio)
@@ -288,48 +289,45 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     
     class PDF(FPDF):
         def header(self):
-            # ARKA PLAN VE OTOMATİK HİZALAMA
+            # ARKA PLAN
             if os.path.exists("arkaplan.png"):
                 self.image("arkaplan.png", 0, 0, 210, 297)
             
             if self.page_no() == 1:
                 if sablon_tipi != "⚓ INNOMAR Özel Teklif":
-                    self.set_y(35) # Başlığı biraz aşağı iterek başlar
+                    self.set_y(40) # Başlığı biraz aşağı iterek başlar
                     self.set_font('Arial', 'B', 16)
                     self.set_text_color(0, 0, 0)
                     self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
-                    self.set_y(45) # Tablo 45mm'den başlar (Logoya çarpmaz)
+                    self.set_y(55) # LOGO İÇİN TABLO 55mm'den BAŞLAR
                 else:
-                    self.set_y(45)
+                    self.set_y(55) # LOGO İÇİN TABLO 55mm'den BAŞLAR
             else:
-                self.set_y(45)
+                self.set_y(55)
 
         def footer(self):
-            # SAĞ ALT ADRES BİLGİLERİ (Otomatik Sabit Konumlar)
-            if os.path.exists("arkaplan.png"):
-                self.set_font('Arial', '', 8)
-                self.set_text_color(50, 50, 50)
-                
-                # Adres
-                self.set_xy(135, 260)
-                self.cell(65, 4, cevir_tr('Heybeliada Mah. Kılavuz Sokak'), 0, 1, 'L')
-                self.set_x(135)
-                self.cell(65, 4, cevir_tr('Zarif Apt. No:16/6 Heybeliada/İST'), 0, 1, 'L')
-                
-                # Telefon
-                self.set_xy(135, 270)
-                self.cell(65, 4, 'Phn: (+90) 536 763 1911', 0, 1, 'L')
-                self.set_x(135)
-                self.cell(65, 4, 'Mob: (+90) 541 552 1907', 0, 1, 'L')
-                
-                # Mail / Web
-                self.set_xy(135, 280)
-                self.cell(65, 4, 'info@innomarin.com', 0, 1, 'L')
-                self.set_x(135)
-                self.cell(65, 4, 'www.innomarin.com', 0, 1, 'L')
+            # PDF ADRES BİLGİSİ İPTAL EDİLDİ (Gerekirse bu bloğu açarsın)
+            pass
+            # if os.path.exists("arkaplan.png"):
+            #     self.set_font('Arial', '', 8)
+            #     self.set_text_color(50, 50, 50)
+            #     self.set_xy(135, 260)
+            #     self.cell(65, 4, cevir_tr('Heybeliada Mah. Kılavuz Sokak'), 0, 1, 'L')
+            #     self.set_x(135)
+            #     self.cell(65, 4, cevir_tr('Zarif Apt. No:16/6 Heybeliada/İST'), 0, 1, 'L')
+            #     self.set_xy(135, 270)
+            #     self.cell(65, 4, 'Phn: (+90) 536 763 1911', 0, 1, 'L')
+            #     self.set_x(135)
+            #     self.cell(65, 4, 'Mob: (+90) 541 552 1907', 0, 1, 'L')
+            #     self.set_xy(135, 280)
+            #     self.cell(65, 4, 'info@innomarin.com', 0, 1, 'L')
+            #     self.set_x(135)
+            #     self.cell(65, 4, 'www.innomarin.com', 0, 1, 'L')
 
     pdf = PDF()
-    pdf.set_margins(left=15, top=45, right=15)
+    
+    # KANKA TABLOYU DARALTMAK İÇİN SAĞDAN/SOLDAN 20MM BOŞLUK BIRAKILDI
+    pdf.set_margins(left=20, top=55, right=20) 
     pdf.set_auto_page_break(auto=True, margin=40)
     pdf.add_page()
     
@@ -337,10 +335,10 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_text_color(0, 0, 0)
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
-        pdf.cell(60, 10, f'* DATE: {tarih}', 0, 1, 'R')
+        pdf.cell(40, 10, f'* DATE: {tarih}', 0, 1, 'R')
     else:
         pdf.cell(130, 10, '', 0, 0, 'L') 
-        pdf.cell(60, 10, f'TARİH: {tarih}', 0, 1, 'R')
+        pdf.cell(40, 10, f'TARİH: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
@@ -374,8 +372,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             pdf.cell(widths[c_idx+1], 8, yaz_fiyat, 1, align=align)
         pdf.ln()
         
-    w_empty = sum(widths[:-2]) if len(widths) > 2 else 110
-    w_label = widths[-2] if len(widths) > 2 else 45
+    w_empty = sum(widths[:-2]) if len(widths) > 2 else 100
+    w_label = widths[-2] if len(widths) > 2 else 40
     w_val = widths[-1]
     
     pdf.set_font('Arial', '', 9)
@@ -400,23 +398,14 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(0, 5, cevir_tr(notlar))
     
-    # Arka plan resmi YOKSA eski standart footer'ı bassın diye güvenlik:
-    if not os.path.exists("arkaplan.png"):
-        pdf.ln(10)
-        if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-            pdf.set_font('Arial', 'B', 8)
-            pdf.cell(0, 4, cevir_tr('Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
-            pdf.cell(0, 4, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
-            pdf.set_font('Arial', '', 8)
-            pdf.cell(0, 4, cevir_tr('Heybeliada Mah. Kilavuz sokak zarif apt. No:16/6 heybeliada istanbul'), 0, 1, 'L')
-            pdf.cell(0, 4, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
-            pdf.set_text_color(0, 51, 153)
-            pdf.cell(0, 4, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
-        else:
-            pdf.set_font('Arial', 'B', 10)
-            pdf.set_text_color(0, 0, 0)
-            pdf.cell(0, 5, cevir_tr('FİRMA LOGOSU'), 0, 1, 'C')
-            pdf.cell(0, 5, cevir_tr('VE BİLGİLERİ'), 0, 1, 'C')
+    # STANDART PDF İMZA KISMI ŞİMDİLİK İPTAL EDİLDİ
+    # if not os.path.exists("arkaplan.png"):
+    #     pdf.ln(10)
+    #     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+    #         pdf.set_font('Arial', 'B', 8)
+    #         pdf.cell(0, 4, cevir_tr('Ilker TEKINKAYA | Managing Partner | INNOMAR MARINA YAT'), 0, 1, 'L')
+    #         pdf.cell(0, 4, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
+    #         ...
 
     return pdf.output(dest='S').encode('latin-1')
 
@@ -539,13 +528,14 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws[f'B{row_idx}'] = satir
         row_idx += 1
         
-    if sablon_tipi != "⚓ INNOMAR Özel Teklif":
-        row_idx += 2
-        ws[f'C{row_idx}'] = "FİRMA LOGOSU"
-        ws[f'C{row_idx}'].font = Font(bold=True)
-        row_idx += 1
-        ws[f'C{row_idx}'] = "VE BİLGİLERİ"
-        ws[f'C{row_idx}'].font = Font(bold=True)
+    # EXCEL İMZA KISMI ŞİMDİLİK İPTAL EDİLDİ
+    # if sablon_tipi != "⚓ INNOMAR Özel Teklif":
+    #     row_idx += 2
+    #     ws[f'C{row_idx}'] = "FİRMA LOGOSU"
+    #     ws[f'C{row_idx}'].font = Font(bold=True)
+    #     row_idx += 1
+    #     ws[f'C{row_idx}'] = "VE BİLGİLERİ"
+    #     ws[f'C{row_idx}'].font = Font(bold=True)
         
     output = io.BytesIO()
     wb.save(output)
