@@ -153,7 +153,7 @@ def get_alignment(col_name):
     if any(x in name for x in ['sıra', 'no', 'kdv', 'adet', 'unit']): return 'C'
     return 'L'
 
-def get_pdf_widths(headers, total_w=150): # KANKA TABLOYU 150 BİRİME KÜÇÜLTTÜK
+def get_pdf_widths(headers, total_w=150): 
     widths = []
     for h in headers:
         name = str(h).lower()
@@ -168,8 +168,7 @@ def get_pdf_widths(headers, total_w=150): # KANKA TABLOYU 150 BİRİME KÜÇÜLT
     return [w * scale for w in widths]
 
 def set_excel_col_widths(ws, headers):
-    # Excel sütun genişliklerini de biraz kıstık ki çok yayılmasın
-    ws.column_dimensions['A'].width = 3 # Sol kenar boşluğu
+    ws.column_dimensions['A'].width = 3
     for i, header in enumerate(headers, 2):
         col_letter = get_column_letter(i)
         name = str(header).lower()
@@ -180,7 +179,7 @@ def set_excel_col_widths(ws, headers):
         elif any(x in name for x in ['marka']):
             ws.column_dimensions[col_letter].width = 15
         elif any(x in name for x in ['açıklama', 'remark', 'işlem']):
-            ws.column_dimensions[col_letter].width = 35
+            ws.column_dimensions[col_letter].width = 40
         else:
             ws.column_dimensions[col_letter].width = 18
 
@@ -269,6 +268,8 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     for satir in notlar.split('\n'):
         doc.add_paragraph(satir)
         
+    # İMZA KISMI TAMAMEN SİLİNDİ
+        
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
@@ -283,7 +284,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                 self.image("arkaplan.png", 0, 0, 210, 297)
             
             if self.page_no() == 1:
-                # YUKARIDAN BOŞLUK 70MM'YE ÇIKARILDI (Logodan tamamen kurtuldu)
                 self.set_y(70) 
                 if sablon_tipi != "⚓ INNOMAR Özel Teklif":
                     self.set_font('Arial', 'B', 16)
@@ -294,28 +294,10 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                 self.set_y(70)
 
         def footer(self):
-            if os.path.exists("arkaplan.png"):
-                self.set_font('Arial', '', 8)
-                self.set_text_color(50, 50, 50)
-                # İkonların Hizası
-                self.set_xy(135, 260)
-                self.cell(65, 4, cevir_tr('Heybeliada Mah. Kılavuz Sokak'), 0, 1, 'L')
-                self.set_x(135)
-                self.cell(65, 4, cevir_tr('Zarif Apt. No:16/6 Heybeliada/İST'), 0, 1, 'L')
-                
-                self.set_xy(135, 270)
-                self.cell(65, 4, 'Phn: (+90) 536 763 1911', 0, 1, 'L')
-                self.set_x(135)
-                self.cell(65, 4, 'Mob: (+90) 541 552 1907', 0, 1, 'L')
-                
-                self.set_xy(135, 280)
-                self.cell(65, 4, 'info@innomarin.com', 0, 1, 'L')
-                self.set_x(135)
-                self.cell(65, 4, 'www.innomarin.com', 0, 1, 'L')
+            pass # PDF İMZA/ADRES KISMI TAMAMEN SİLİNDİ
 
     pdf = PDF()
     
-    # KANKA TABLOYU DARALTTIĞIMIZ İÇİN SOLDAN 30MM BOŞLUK BIRAKTIK Kİ TAM ORTALANSIN
     pdf.set_margins(left=30, top=70, right=30) 
     pdf.set_auto_page_break(auto=True, margin=40)
     pdf.add_page()
@@ -361,7 +343,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             pdf.cell(widths[c_idx+1], 8, yaz_fiyat, 1, align=align)
         pdf.ln()
         
-    # Tablo genişliği 150 olduğu için toplam kısımları da orantılandı
     w_empty = sum(widths[:-2]) if len(widths) > 2 else 85
     w_label = widths[-2] if len(widths) > 2 else 40
     w_val = widths[-1]
@@ -387,6 +368,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.ln(10)
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(0, 5, cevir_tr(notlar))
+    
+    # İMZA KISMI TAMAMEN SİLİNDİ
 
     return pdf.output(dest='S').encode('latin-1')
 
@@ -395,12 +378,10 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     ws = wb.active
     ws.title = "Belge"
     
-    # EXCEL'İ A4 KAĞIDI GİBİ GÖSTERMEK İÇİN IZGARA ÇİZGİLERİNİ KAPATTIK
     ws.sheet_view.showGridLines = False 
     
     birim_sutun = get_birim_col(dataframe.columns)
     
-    # Yukarıdan antet logoları için boşluk (10 satır)
     row_idx = 10 
     
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
@@ -422,7 +403,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
-    # Excel'de tabloyu B sütunundan başlattık (A sütunu sol boşluk)
     for col_num, header in enumerate(headers, 2):
         cell = ws.cell(row=row_idx, column=col_num)
         cell.value = str(header)
@@ -500,6 +480,8 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     for satir in notlar.split('\n'):
         ws[f'C{row_idx}'] = satir
         row_idx += 1
+        
+    # EXCEL İMZA KISMI TAMAMEN SİLİNDİ
         
     output = io.BytesIO()
     wb.save(output)
