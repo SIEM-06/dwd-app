@@ -73,7 +73,7 @@ if len(yeni_sutunlar) < 2:
     yeni_sutunlar = st.session_state.veri_df.columns.tolist()
 
 if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
-    eski_df = st.session_state.veri_df
+    eski_df = st.session_state.veri_df.copy()
     yeni_df = pd.DataFrame(columns=yeni_sutunlar)
     for col in yeni_sutunlar:
         if col in eski_df.columns:
@@ -84,12 +84,24 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-df = st.session_state.veri_df
+# --- ZIRHLI VERİ TİPİ KORUMASI ---
+df = st.session_state.veri_df.copy()
 son_sutun = df.columns[-1] 
+
+for col in df.columns:
+    if col == son_sutun or str(col).strip() in ["Adet", "Birim Fiyat"]:
+        # Virgülleri noktaya çevir, zorla sayı yap (Float)
+        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
+    else:
+        # Geri kalanlar kesinlikle metin olmalı
+        df[col] = df[col].astype(str)
+        df[col] = df[col].apply(lambda x: "" if str(x).lower() in ['nan', 'none', '<na>'] else x)
+
+st.session_state.veri_df = df
 
 col_config = {}
 for col in df.columns[:-1]:
-    if col in ["Adet", "Birim Fiyat"]:
+    if str(col).strip() in ["Adet", "Birim Fiyat"]:
         col_config[col] = st.column_config.NumberColumn(col)
     else:
         col_config[col] = st.column_config.TextColumn(col)
@@ -97,19 +109,22 @@ col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {se
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True)
+tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
+duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True, key=tablo_key)
 
-# --- OTOMATİK MATEMATİK MOTORU ---
+# --- ÇÖKMEZ MATEMATİK MOTORU ---
 if "Adet" in duzenlenmis_df.columns and "Birim Fiyat" in duzenlenmis_df.columns:
-    duzenlenmis_df["Adet"] = pd.to_numeric(duzenlenmis_df["Adet"], errors='coerce').fillna(1)
-    duzenlenmis_df["Birim Fiyat"] = pd.to_numeric(duzenlenmis_df["Birim Fiyat"], errors='coerce').fillna(0)
-    duzenlenmis_df[son_sutun] = duzenlenmis_df["Adet"] * duzenlenmis_df["Birim Fiyat"]
+    # Sayıları zorla float (ondalıklı sayı) formatına alıyoruz ki çarparken 'metin' hatası vermesin
+    adet_val = pd.to_numeric(duzenlenmis_df["Adet"].astype(str).str.replace(',', '.'), errors='coerce').fillna(1.0).astype(float)
+    birim_val = pd.to_numeric(duzenlenmis_df["Birim Fiyat"].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0).astype(float)
+    
+    duzenlenmis_df[son_sutun] = adet_val * birim_val
     st.caption("⚡ 'Adet' ve 'Birim Fiyat' bulundu. Toplam Fiyat otomatik olarak çarpılıp hesaplandı.")
 else:
-    duzenlenmis_df[son_sutun] = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
+    duzenlenmis_df[son_sutun] = pd.to_numeric(duzenlenmis_df[son_sutun].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0).astype(float)
 
 # --- HESAPLAMALAR ---
-fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
+fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0.0)
 ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
@@ -225,7 +240,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
                 row_cells[c_idx+1].text = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(val, errors='coerce')
+                fiyat = pd.to_numeric(str(val).replace(',', '.'), errors='coerce')
                 row_cells[c_idx+1].text = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
             else:
                 row_cells[c_idx+1].text = str(val)
@@ -332,7 +347,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                 yazilacak_metin = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(val, errors='coerce')
+                fiyat = pd.to_numeric(str(val).replace(',', '.'), errors='coerce')
                 yazilacak_metin = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
             else:
                 yazilacak_metin = cevir_tr(str(val))
@@ -453,7 +468,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
                 cell.value = "***"
                 cell.alignment = Alignment(horizontal="center")
             elif col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(val, errors='coerce')
+                fiyat = pd.to_numeric(str(val).replace(',', '.'), errors='coerce')
                 if pd.isna(fiyat) or fiyat <= 0:
                     cell.value = "-NIL-"
                 else:
