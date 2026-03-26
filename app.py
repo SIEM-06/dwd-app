@@ -7,6 +7,7 @@ from fpdf import FPDF
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.drawing.image import Image as xlImage
@@ -15,14 +16,13 @@ st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_s
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
 
-# --- ÜST PANEL: TARİH, SÜTUN İSİMLERİ VE PARA BİRİMİ ---
-col_t, col_kur, col_h1, col_h2, col_h3 = st.columns([1, 1, 1, 1, 1])
+# --- ÜST PANEL: TARİH VE PARA BİRİMİ ---
+col_t, col_kur = st.columns([1, 1])
 
 secilen_tarih = col_t.date_input("Teklif Tarihi", datetime.date.today())
 tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
 dosya_tarihi = secilen_tarih.strftime("%d_%m_%Y")
 
-# Para Birimi Seçimi
 kur_secimi = col_kur.selectbox("Para Birimi", ["Euro (€)", "Dolar ($)", "Türk Lirası (₺)"])
 if "Euro" in kur_secimi:
     sembol = "€"
@@ -34,37 +34,64 @@ else:
     sembol = "₺"
     kur_metin = "TL"
 
-baslik_1 = col_h1.text_input("1. Sütun Adı", "INSPECTION REMARK")
-baslik_2 = col_h2.text_input("2. Sütun Adı", "UNIT")
-baslik_3 = col_h3.text_input("3. Sütun Adı", "PRICE")
+# --- DİNAMİK SÜTUN YÖNETİMİ ---
+st.write("---")
+st.subheader("🛠️ Sütunları Düzenle")
+st.caption("Aşağıdaki kutuya virgülle ayırarak istediğiniz kadar sütun ekleyebilir veya silebilirsiniz. **DİKKAT: Hesaplamaların doğru çalışması için fiyat sütunu her zaman EN SONDA olmalıdır.**")
 
-st.info("Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
-
-# --- VERİ SETİ ---
 if 'veri_df' not in st.session_state:
     data = {
-        'İşlem': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
-        'Birim': ['2 PIECES', '1 SET', '1 SET'],
-        'Fiyat': [40000.0, 12000.0, 0.0]
+        'INSPECTION REMARK': ['ANA MAKİNE BAKIMLARI', 'SU YAPICI BAKIMLARI', 'ZİNCİR GALVANİZ YAPIMI'],
+        'UNIT': ['2 PIECES', '1 SET', '1 SET'],
+        'PRICE': [40000.0, 12000.0, 0.0]
     }
     st.session_state.veri_df = pd.DataFrame(data)
 
-df = st.session_state.veri_df
+mevcut_sutunlar = ", ".join(st.session_state.veri_df.columns)
+yeni_sutunlar_str = st.text_input("Tablo Sütunları:", mevcut_sutunlar)
 
-# Sütun isimlerini ve para birimi sembolünü dinamik göster
+# Kullanıcının girdiği virgüllü metni listeye çevirip temizliyoruz
+yeni_sutunlar = [s.strip() for s in yeni_sutunlar_str.split(",") if s.strip()]
+yeni_sutunlar = list(dict.fromkeys(yeni_sutunlar)) # Aynı isimde iki sütun olmasını engeller
+
+if len(yeni_sutunlar) < 2:
+    st.warning("Lütfen tabloda en az 2 sütun bırakın (Örn: İşlem, Fiyat)")
+    yeni_sutunlar = st.session_state.veri_df.columns.tolist()
+
+# Eğer sütunlarda değişiklik yapıldıysa DataFrame'i güncelle
+if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
+    eski_df = st.session_state.veri_df
+    yeni_df = pd.DataFrame(columns=yeni_sutunlar)
+    for col in yeni_sutunlar:
+        if col in eski_df.columns:
+            yeni_df[col] = eski_df[col]
+        else:
+            yeni_df[col] = "" # Yeni eklenen sütunun içini boş bırak
+    st.session_state.veri_df = yeni_df
+    st.rerun()
+
+df = st.session_state.veri_df
+son_sutun = df.columns[-1] # En son sütun her zaman fiyat olarak kabul edilir
+
+# Arayüzdeki tablo ayarları
+col_config = {}
+for col in df.columns[:-1]:
+    col_config[col] = st.column_config.TextColumn(col)
+col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {sembol}")
+
+st.info("💡 Telefondan veri girerken tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
+
 duzenlenmis_df = st.data_editor(
     df,
-    column_config={
-        "İşlem": st.column_config.TextColumn(baslik_1),
-        "Birim": st.column_config.TextColumn(baslik_2),
-        "Fiyat": st.column_config.NumberColumn(baslik_3, format=f"%d {sembol}"),
-    },
+    column_config=col_config,
     num_rows="dynamic",
     use_container_width=True 
 )
 
 # --- HESAPLAMALAR ---
-ara_toplam = duzenlenmis_df['Fiyat'].sum()
+# Sadece en son sütundaki rakamları topla
+fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
+ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
 
@@ -90,15 +117,14 @@ varsayilan_not = """* IMPORTANT NOTICE;
 - PAYMENT WILL BE ACCEPTED AS BELOW;
     - %50 BEFORE WORK BEGINS,
     - %50 UPON COMPLETION OF THE WORK."""
-
 kullanici_notu = st.text_area("Bu alana yazdığınız her şey tabloların altına eklenecektir:", value=varsayilan_not, height=200)
 
 st.write("---")
 
 # ==========================================
-# WORD OLUŞTURMA MOTORU
+# WORD OLUŞTURMA MOTORU (DİNAMİK)
 # ==========================================
-def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m):
+def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     doc = Document()
     
     if os.path.exists("logo.png"):
@@ -113,13 +139,8 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_
     run_name.font.color.rgb = RGBColor(0, 51, 153)
     run_name.font.size = Pt(10)
     
-    run_addr = p_info.add_run("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\n")
+    run_addr = p_info.add_run("Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7\nPendik - ISTANBUL/TURKEY\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@inno-mar.com.tr | www.inno-mar.com.tr")
     run_addr.font.size = Pt(9)
-    
-    run_mail = p_info.add_run("Email- info@inno-mar.com.tr | www.inno-mar.com.tr")
-    run_mail.font.color.rgb = RGBColor(0, 51, 153)
-    run_mail.font.size = Pt(9)
-    
     doc.add_paragraph("_" * 75)
     
     p_title = doc.add_paragraph()
@@ -127,11 +148,15 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_
     run_title.bold = True
     run_title.font.size = Pt(10)
     
-    table = doc.add_table(rows=1, cols=4)
+    # Dinamik Sütun Sayısı
+    table = doc.add_table(rows=1, cols=len(dataframe.columns) + 1)
     table.style = 'Table Grid'
     
     hdr_cells = table.rows[0].cells
-    hdr_cells[0].text, hdr_cells[1].text, hdr_cells[2].text, hdr_cells[3].text = 'ITEM NO', h1, h2, h3
+    hdr_cells[0].text = 'ITEM NO'
+    for idx, col_name in enumerate(dataframe.columns):
+        hdr_cells[idx+1].text = str(col_name)
+        
     for cell in hdr_cells:
         for paragraph in cell.paragraphs:
             for run in paragraph.runs:
@@ -140,15 +165,38 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
         row_cells[0].text = str(index + 1)
-        row_cells[1].text = str(row['İşlem'])
-        row_cells[2].text = str(row['Birim'])
-        fiyat = row['Fiyat']
-        row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}" if fiyat > 0 else "-NIL-"
+        for idx, col_name in enumerate(dataframe.columns):
+            val = row[col_name]
+            if col_name == dataframe.columns[-1]: # Son Sütun (Fiyat)
+                fiyat = pd.to_numeric(val, errors='coerce')
+                if pd.isna(fiyat) or fiyat <= 0:
+                    row_cells[idx+1].text = "-NIL-"
+                else:
+                    row_cells[idx+1].text = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+            else:
+                row_cells[idx+1].text = str(val)
+                
+    # Genişlik Ayarları (Word)
+    mid_cols = dataframe.columns[:-1]
+    w_mids = []
+    if len(mid_cols) == 1:
+        w_mids = [14.0]
+    elif len(mid_cols) == 2:
+        w_mids = [9.5, 4.5]
+    else:
+        w_first = 14.0 - (len(mid_cols)-1)*3.0
+        w_mids = [w_first] + [3.0]*(len(mid_cols)-1)
         
+    widths = [Cm(1.5)] + [Cm(w) for w in w_mids] + [Cm(3.5)]
+    for row in table.rows:
+        for idx, width in enumerate(widths):
+            row.cells[idx].width = width
+            
     doc.add_paragraph()
     
     tot_table = doc.add_table(rows=3, cols=2)
     tot_table.style = 'Table Grid'
+    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
     
     tot_table.rows[0].cells[0].text, tot_table.rows[0].cells[1].text = "TOTAL PRICE", a_str
     tot_table.rows[1].cells[0].text, tot_table.rows[1].cells[1].text = "VAT (20%)", k_str
@@ -156,6 +204,11 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_
     
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].runs[0].font.bold = True
+        
+    tot_widths = [Cm(4.5), Cm(3.5)]
+    for row in tot_table.rows:
+        for idx, width in enumerate(tot_widths):
+            row.cells[idx].width = width
                     
     doc.add_paragraph()
     for satir in notlar.split('\n'):
@@ -169,88 +222,104 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_
     return bio.getvalue()
 
 # ==========================================
-# EXCEL OLUŞTURMA MOTORU
+# EXCEL OLUŞTURMA MOTORU (DİNAMİK)
 # ==========================================
-def excel_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m):
+def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     wb = Workbook()
     ws = wb.active
     ws.title = "Innomar Teklif"
     
-    ws.column_dimensions['A'].width = 8
-    ws.column_dimensions['B'].width = 52
-    ws.column_dimensions['C'].width = 25
-    ws.column_dimensions['D'].width = 18
-    
     row_idx = 1
-    
     if os.path.exists("logo.png"):
         img = xlImage("logo.png")
         ws.add_image(img, 'B1')
         row_idx = 8
         
-    blue_font_bold = Font(color="003399", bold=True, size=11)
-    black_font = Font(color="000000", size=10)
-    blue_font = Font(color="003399", size=10)
-    
     ws[f'B{row_idx}'] = "INNOMAR MARİNA YAT LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş."
-    ws[f'B{row_idx}'].font = blue_font_bold
+    ws[f'B{row_idx}'].font = Font(color="003399", bold=True, size=11)
     row_idx += 1
     ws[f'B{row_idx}'] = "Bahçelievler Mah Şehit Fethi Cad. Duygu Sokak No.3 İç Kapı No. 7 Pendik - ISTANBUL/TURKEY"
-    ws[f'B{row_idx}'].font = black_font
     row_idx += 1
     ws[f'B{row_idx}'] = "Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907"
-    ws[f'B{row_idx}'].font = black_font
     row_idx += 1
     ws[f'B{row_idx}'] = "Email- info@inno-mar.com.tr | www.inno-mar.com.tr"
-    ws[f'B{row_idx}'].font = blue_font
+    ws[f'B{row_idx}'].font = Font(color="003399", size=10)
     row_idx += 2
     
     ws[f'B{row_idx}'] = "• MY ADA DRY DOCK SERVICES QUOTATION;"
     ws[f'B{row_idx}'].font = Font(bold=True)
-    ws[f'D{row_idx}'] = f"* DATE: {tarih}"
-    ws[f'D{row_idx}'].font = Font(bold=True)
+    ws.cell(row=row_idx, column=len(dataframe.columns)+1).value = f"* DATE: {tarih}"
+    ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
     row_idx += 2
     
-    headers = ['ITEM NO', h1, h2, h3]
+    headers = ['ITEM NO'] + list(dataframe.columns)
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    
+    # Sütun Genişliklerini Ayarla
+    ws.column_dimensions['A'].width = 8
+    harfler = 'BCDEFGHIJKLMNOPQRSTUVWXYZ'
+    mid_cols = dataframe.columns[:-1]
+    
+    if len(mid_cols) == 1:
+        ws.column_dimensions['B'].width = 75
+    elif len(mid_cols) == 2:
+        ws.column_dimensions['B'].width = 52
+        ws.column_dimensions['C'].width = 25
+    else:
+        ws.column_dimensions['B'].width = 40
+        for i in range(1, len(mid_cols)):
+            ws.column_dimensions[harfler[i]].width = 18
+            
+    fiyat_harf = harfler[len(mid_cols)]
+    ws.column_dimensions[fiyat_harf].width = 20
     
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
-        cell.value = header
+        cell.value = str(header)
         cell.font = Font(bold=True)
         cell.border = thin_border
     row_idx += 1
     
     for index, row in dataframe.iterrows():
         ws.cell(row=row_idx, column=1).value = index + 1
-        ws.cell(row=row_idx, column=2).value = str(row['İşlem'])
-        ws.cell(row=row_idx, column=3).value = str(row['Birim'])
-        fiyat = row['Fiyat']
-        ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}" if fiyat > 0 else "-NIL-"
+        ws.cell(row=row_idx, column=1).border = thin_border
         
-        for i in range(1, 5):
-            ws.cell(row=row_idx, column=i).border = thin_border
+        for c_idx, col_name in enumerate(dataframe.columns):
+            val = row[col_name]
+            if col_name == dataframe.columns[-1]: 
+                fiyat = pd.to_numeric(val, errors='coerce')
+                if pd.isna(fiyat) or fiyat <= 0:
+                    ws.cell(row=row_idx, column=c_idx+2).value = "-NIL-"
+                else:
+                    ws.cell(row=row_idx, column=c_idx+2).value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+            else:
+                ws.cell(row=row_idx, column=c_idx+2).value = str(val)
+                
+            ws.cell(row=row_idx, column=c_idx+2).border = thin_border
         row_idx += 1
         
-    ws.cell(row=row_idx, column=3).value = "TOTAL PRICE"
-    ws.cell(row=row_idx, column=3).border = thin_border
-    ws.cell(row=row_idx, column=4).value = a_str
-    ws.cell(row=row_idx, column=4).font = Font(bold=True)
-    ws.cell(row=row_idx, column=4).border = thin_border
+    tot_col = len(dataframe.columns)
+    val_col = len(dataframe.columns) + 1
+    
+    ws.cell(row=row_idx, column=tot_col).value = "TOTAL PRICE"
+    ws.cell(row=row_idx, column=tot_col).border = thin_border
+    ws.cell(row=row_idx, column=val_col).value = a_str
+    ws.cell(row=row_idx, column=val_col).font = Font(bold=True)
+    ws.cell(row=row_idx, column=val_col).border = thin_border
     row_idx += 1
     
-    ws.cell(row=row_idx, column=3).value = "VAT (20%)"
-    ws.cell(row=row_idx, column=3).border = thin_border
-    ws.cell(row=row_idx, column=4).value = k_str
-    ws.cell(row=row_idx, column=4).font = Font(bold=True)
-    ws.cell(row=row_idx, column=4).border = thin_border
+    ws.cell(row=row_idx, column=tot_col).value = "VAT (20%)"
+    ws.cell(row=row_idx, column=tot_col).border = thin_border
+    ws.cell(row=row_idx, column=val_col).value = k_str
+    ws.cell(row=row_idx, column=val_col).font = Font(bold=True)
+    ws.cell(row=row_idx, column=val_col).border = thin_border
     row_idx += 1
     
-    ws.cell(row=row_idx, column=3).value = "GRAND TOTAL"
-    ws.cell(row=row_idx, column=3).border = thin_border
-    ws.cell(row=row_idx, column=4).value = g_str
-    ws.cell(row=row_idx, column=4).font = Font(bold=True)
-    ws.cell(row=row_idx, column=4).border = thin_border
+    ws.cell(row=row_idx, column=tot_col).value = "GRAND TOTAL"
+    ws.cell(row=row_idx, column=tot_col).border = thin_border
+    ws.cell(row=row_idx, column=val_col).value = g_str
+    ws.cell(row=row_idx, column=val_col).font = Font(bold=True)
+    ws.cell(row=row_idx, column=val_col).border = thin_border
     row_idx += 2
     
     for satir in notlar.split('\n'):
@@ -262,14 +331,14 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur
     return output.getvalue()
 
 # ==========================================
-# PDF OLUŞTURMA MOTORU
+# PDF OLUŞTURMA MOTORU (DİNAMİK)
 # ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
 
-def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m):
+def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     class PDF(FPDF):
         def header(self):
             if self.page_no() == 1:
@@ -311,21 +380,43 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m
     pdf.cell(60, 10, f'* DATE: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
+    # Dinamik Sütun Genişlikleri Hesaplama
+    cols = list(dataframe.columns)
+    mid_cols = cols[:-1]
+    last_col = cols[-1]
+    
+    w_item = 15
+    w_price = 35
+    w_mids = []
+    
+    if len(mid_cols) == 1:
+        w_mids = [140]
+    elif len(mid_cols) == 2:
+        w_mids = [95, 45]
+    else:
+        w_first = 140 - (len(mid_cols)-1)*30
+        w_mids = [w_first] + [30]*(len(mid_cols)-1)
+    
     pdf.set_draw_color(0, 0, 0)
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(15, 8, 'ITEM NO', 1)
-    pdf.cell(95, 8, cevir_tr(h1), 1)
-    pdf.cell(45, 8, cevir_tr(h2), 1)
-    pdf.cell(35, 8, cevir_tr(h3), 1)
+    pdf.cell(w_item, 8, 'ITEM NO', 1)
+    for idx, col_name in enumerate(mid_cols):
+        pdf.cell(w_mids[idx], 8, cevir_tr(str(col_name)), 1)
+    pdf.cell(w_price, 8, cevir_tr(str(last_col)), 1)
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
     for index, row in dataframe.iterrows():
-        pdf.cell(15, 8, str(index + 1), 1)
-        pdf.cell(95, 8, cevir_tr(str(row['İşlem'])), 1)
-        pdf.cell(45, 8, cevir_tr(str(row['Birim'])), 1)
-        fiyat = row['Fiyat']
-        pdf.cell(35, 8, f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}" if fiyat > 0 else "-NIL-", 1)
+        pdf.cell(w_item, 8, str(index + 1), 1)
+        for idx, col_name in enumerate(mid_cols):
+            pdf.cell(w_mids[idx], 8, cevir_tr(str(row[col_name])), 1)
+            
+        fiyat = pd.to_numeric(row[last_col], errors='coerce')
+        if pd.isna(fiyat) or fiyat <= 0:
+            fiyat_str = "-NIL-"
+        else:
+            fiyat_str = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+        pdf.cell(w_price, 8, fiyat_str, 1)
         pdf.ln()
         
     pdf.set_font('Arial', '', 9)
@@ -372,8 +463,8 @@ st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
