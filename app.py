@@ -34,11 +34,12 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
-        # KANKA: KDV VE BİRİM FİYATI YER DEĞİŞTİRİLDİ (Senin isteğin üzerine)
+        # KANKA: İSTEDİĞİN GİBİ KDV VE BİRİM FİYATI YER DEĞİŞTİRDİ. 
+        # BİRİM FİYATI (Geniş Sütun) TUTARIN YANINA ALINDI Kİ TAŞMA YAPMASIN.
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
-            'KDV': ['%20', '%20'],
             'Adet': ['1', '2'],
+            'KDV': ['%20', '%20'],
             'Birim Fiyatı': ['1000', '500'],
             'Tutar': [1000.0, 1000.0]
         }
@@ -326,11 +327,9 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
     widths = get_pdf_widths(headers)
     
-    # Çizgilerin net çıkması için saf siyah renk
     pdf.set_draw_color(0, 0, 0)
     pdf.set_line_width(0.2) 
     
-    # PDF TABLO BAŞLIĞI RENGİ - Her zaman sayfa rengi (Bembeyaz)
     pdf.set_fill_color(255, 255, 255) 
         
     pdf.set_font('Arial', 'B', 9)
@@ -361,33 +360,37 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             pdf.cell(widths[c_idx+1], 8, yazilacak, 1, align=align, fill=True)
         pdf.ln()
         
-    # KANKA: İŞTE O ALTIN ORAN MATEMATİK HİZALAMASI! (Asla taşmaz ve çizgiler cetvel gibi uyar)
-    w_val = widths[-1] # En sağdaki Tutar sütununun genişliği
+    # KANKA: İŞTE TAŞMAYI VE ÇİZGİ KAYMASINI ÖNLEYEN DİNAMİK HİZALAMA
+    w_val = widths[-1] 
     
-    if len(widths) > 3:
-        w_label = widths[-2] + widths[-3] # Ara Toplam yazan alan tam üstteki iki sütunu kaplar
-        w_empty = sum(widths[:-3]) # Kalan tüm sol boşluk
-    elif len(widths) == 3:
-        w_label = widths[-2]
-        w_empty = widths[-3]
-    else:
-        w_label = 40
-        w_empty = sum(widths) - w_val - w_label
+    label_w = 0
+    label_cols = 0
+    for w in reversed(widths[:-1]):
+        label_w += w
+        label_cols += 1
+        if label_w >= 35: 
+            break
+            
+    w_label = label_w
+    w_empty = sum(widths[:-1-label_cols]) if len(widths) > label_cols + 1 else 0
     
     pdf.set_font('Arial', '', 9)
-    pdf.cell(w_empty, 8, '', 0, 0)
+    if w_empty > 0:
+        pdf.cell(w_empty, 8, '', 0, 0)
     pdf.cell(w_label, 8, 'Ara Toplam' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'TOTAL PRICE', 1, 0, 'R')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, a_str, 1, 1, 'R')
     
     pdf.set_font('Arial', '', 9)
-    pdf.cell(w_empty, 8, '', 0, 0)
+    if w_empty > 0:
+        pdf.cell(w_empty, 8, '', 0, 0)
     pdf.cell(w_label, 8, 'KDV % 20' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'R')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, k_str, 1, 1, 'R')
     
     pdf.set_font('Arial', 'B', 9)
-    pdf.cell(w_empty, 8, '', 0, 0)
+    if w_empty > 0:
+        pdf.cell(w_empty, 8, '', 0, 0)
     pdf.cell(w_label, 8, 'GENEL TOPLAM' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'GRAND TOTAL', 1, 0, 'R')
     pdf.cell(w_val, 8, g_str, 1, 1, 'R')
     
@@ -475,7 +478,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     set_excel_col_widths(ws, headers)
     
-    # KANKA: EXCEL ÇİZGİLERİNİN %100 GÖZÜKMESİ İÇİN ZORUNLU SAF SİYAH RENK!
     thin_border = Border(
         left=Side(border_style='thin', color='000000'), 
         right=Side(border_style='thin', color='000000'), 
