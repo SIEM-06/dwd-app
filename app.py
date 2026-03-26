@@ -203,7 +203,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             p_logo = doc.add_paragraph()
             p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_logo.add_run().add_picture("ust_bar.png", width=Cm(16))
-            doc.add_paragraph("\n\n")
+            doc.add_paragraph("\n\n") 
         else:
             doc.add_paragraph("FİRMA LOGOSU VE BİLGİLERİ\n(Lütfen 'ust_bar.png' dosyasını klasöre ekleyin)").runs[0].bold = True
             doc.add_paragraph("_" * 75)
@@ -293,7 +293,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.set_text_color(0, 51, 153)
                     self.cell(0, 5, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
                     self.set_draw_color(0, 51, 153)
-                    self.set_line_width(0.3)
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
@@ -393,8 +392,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     ws = wb.active
     ws.title = "Belge"
     
-    # KANKA: IZGARALAR AÇILDI!
-    
     row_idx = 1
     birim_sutun = get_birim_col(dataframe.columns)
     
@@ -420,6 +417,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
+        # FATURA İÇİN EXCEL (Izgaralar kalır, görsel ve metinler büyütülerek yerleştirilir)
         resim_yolu = None
         if os.path.exists("excel_ust_bar.png"):
             resim_yolu = "excel_ust_bar.png"
@@ -428,33 +426,42 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             
         if resim_yolu:
             img = xlImage(resim_yolu)
-            
-            # KANKA: A ILE F ARASINA TAM OTURMASI İÇİN GENİŞLİK AYARI
             oran = 700 / img.width
             img.width = 700
             img.height = int(img.height * oran)
-                
             ws.add_image(img, 'A1')
-            row_idx = 14 # Resmin boyutuna göre tabloyu aşağıya aldık
+            row_idx = 12 # Resmin altından 12. satırdan başlayalım
         else:
-            ws[f'A{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
-            ws[f'A{row_idx}'].font = Font(bold=True, size=14)
-            row_idx += 3
-            ws[f'C{row_idx}'] = "PROFORMA FATURA"
-            ws[f'C{row_idx}'].font = Font(bold=True, size=16)
-            ws[f'C{row_idx}'].alignment = Alignment(horizontal="center")
-            row_idx += 2
+            ws[f'A1'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
+            ws[f'A1'].font = Font(bold=True, size=14)
+            ws[f'C4'] = "PROFORMA FATURA"
+            ws[f'C4'].font = Font(bold=True, size=16)
+            ws[f'C4'].alignment = Alignment(horizontal="center")
+            row_idx = 12
         
-        # KANKA: Fatura Kesilen ve Tarih Yazısı
+        tarih_sutun = len(dataframe.columns) - 1
+        if tarih_sutun < 4:
+            tarih_sutun = 4
+            
+        # KANKA: 12, 13, 14. satırlar tam dolacak ve büyük fontlu olacak
         ws.cell(row=row_idx, column=1).value = "Fatura Kesilen:"
-        ws.cell(row=row_idx, column=1).font = Font(bold=True)
+        ws.cell(row=row_idx, column=1).font = Font(bold=True, size=14) 
+        ws.cell(row=row_idx, column=tarih_sutun).value = "Fatura Numarası: ........................"
+        ws.cell(row=row_idx, column=tarih_sutun).font = Font(size=12)
         
-        tarih_sutun = len(dataframe.columns)
-        ws.cell(row=row_idx+1, column=tarih_sutun).value = "Fatura Tarihi:"
-        ws.cell(row=row_idx+1, column=tarih_sutun).font = Font(bold=True)
-        ws.cell(row=row_idx+1, column=tarih_sutun+1).value = tarih
+        row_idx += 1
+        ws.cell(row=row_idx, column=1).value = "Müşteri Adı: .............................................................."
+        ws.cell(row=row_idx, column=1).font = Font(size=12)
+        ws.cell(row=row_idx, column=tarih_sutun).value = "Fatura Tarihi:"
+        ws.cell(row=row_idx, column=tarih_sutun).font = Font(bold=True, size=12)
+        ws.cell(row=row_idx, column=tarih_sutun+1).value = tarih
+        ws.cell(row=row_idx, column=tarih_sutun+1).font = Font(bold=True, size=12)
         
-        row_idx += 3
+        row_idx += 1
+        ws.cell(row=row_idx, column=1).value = "Adres: ........................................................................"
+        ws.cell(row=row_idx, column=1).font = Font(size=12)
+        
+        row_idx += 2 # Tabloya geçmeden boşluk bırak, 16. satırdan başlasın
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     set_excel_col_widths(ws, headers)
