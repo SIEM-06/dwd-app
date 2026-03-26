@@ -66,7 +66,6 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         else:
             yeni_df[col] = "" 
             
-    # HATA ÇÖZÜMÜ: Son sütunu zorla sayı formatına çeviriyoruz ki çökmesin
     son_sutun_adi = yeni_sutunlar[-1]
     yeni_df[son_sutun_adi] = pd.to_numeric(yeni_df[son_sutun_adi], errors='coerce').fillna(0.0)
     
@@ -76,7 +75,6 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
 df = st.session_state.veri_df
 son_sutun = df.columns[-1] 
 
-# Güvenlik için arayüze basmadan önce son sütunun kesin sayı olduğundan emin oluyoruz
 df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
 
 col_config = {}
@@ -122,11 +120,10 @@ varsayilan_not = """* IMPORTANT NOTICE;
     - %50 BEFORE WORK BEGINS,
     - %50 UPON COMPLETION OF THE WORK."""
 
-# NOTLARIN HAFIZADA KALMASI İÇİN SESSION STATE KULLANIMI
-if "not_alani" not in st.session_state:
-    st.session_state.not_alani = varsayilan_not
+kullanici_notu = st.text_area("Bu alana yazdığınız metin tabloların altına eklenecektir:", value=varsayilan_not, height=200)
 
-st.text_area("Bu alana yazdığınız her şey tabloların altına eklenecektir:", key="not_alani", height=200)
+if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
+    st.success("Notlarınız başarıyla hafızaya alındı! Şimdi aşağıdaki butonlardan çıktı alabilirsiniz.")
 
 st.write("---")
 
@@ -468,8 +465,8 @@ st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
