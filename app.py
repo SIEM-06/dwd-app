@@ -34,7 +34,6 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
-        # KANKA BURASI SENİN BEJ TABLONA UYGUN YENİ SÜTUN YERLEŞİMİ
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
             'Birim Fiyatı': ['1000', '500'],
@@ -42,7 +41,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
             'KDV': ['%20', '%20'],
             'Tutar': [1000.0, 1000.0]
         }
-        st.session_state.not_alani = "" # Faturada görünmez alan için boş bırakıldı
+        st.session_state.not_alani = "" 
     
     st.session_state.veri_df = pd.DataFrame(data)
     st.rerun()
@@ -200,12 +199,11 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         p_title = doc.add_paragraph()
         p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}").bold = True
     else:
-        # WORD İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
         if os.path.exists("ust_bar.png"):
             p_logo = doc.add_paragraph()
             p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_logo.add_run().add_picture("ust_bar.png", width=Cm(16))
-            doc.add_paragraph("\n\n") # Tablodan önce boşluk
+            doc.add_paragraph("\n\n")
         else:
             doc.add_paragraph("FİRMA LOGOSU VE BİLGİLERİ\n(Lütfen 'ust_bar.png' dosyasını klasöre ekleyin)").runs[0].bold = True
             doc.add_paragraph("_" * 75)
@@ -299,11 +297,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
-                    # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR (A4 Genişliğine Tam Yayılır)
                     if os.path.exists("ust_bar.png"):
-                        # A4 kağıdı 210mm genişliğindedir, resmi tam oturtuyoruz.
                         self.image("ust_bar.png", x=0, y=0, w=210)
-                        # Tablonun resmin üstüne binmemesi için Y eksenini biraz daha artırdık.
                         self.set_y(80) 
                     else:
                         self.set_font('Arial', 'B', 12)
@@ -330,13 +325,12 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
     widths = get_pdf_widths(headers)
     
-    # --- KANKA BEJ RENKLİ TABLO BAŞLIĞI BURASI ---
     pdf.set_draw_color(0, 0, 0) 
     
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.set_fill_color(255, 255, 255) 
     else:
-        pdf.set_fill_color(245, 245, 235) # Fatura İçin Orijinal Bej (Krem) Rengi
+        pdf.set_fill_color(245, 245, 235) 
         
     pdf.set_font('Arial', 'B', 9)
     for idx, header in enumerate(headers):
@@ -398,11 +392,14 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     wb = Workbook()
     ws = wb.active
     ws.title = "Belge"
-    ws.sheet_view.showGridLines = False
+    
+    # KANKA: IZGARALAR AÇILDI!
+    
     row_idx = 1
     birim_sutun = get_birim_col(dataframe.columns)
     
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        ws.sheet_view.showGridLines = False
         if os.path.exists("logo.png"):
             img = xlImage("logo.png")
             ws.add_image(img, 'B1')
@@ -423,7 +420,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # EXCEL İÇİN AYRI ÜST BAR FOTOĞRAFI EKLENİYOR (İlk kontrol excel_ust_bar.png)
         resim_yolu = None
         if os.path.exists("excel_ust_bar.png"):
             resim_yolu = "excel_ust_bar.png"
@@ -433,36 +429,42 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         if resim_yolu:
             img = xlImage(resim_yolu)
             
-            # EXCEL İÇİN OTOMATİK BOYUTLANDIRMA (Çok büyük olmasını engeller)
-            if img.width > 750:
-                oran = 750 / img.width
-                img.width = 750
-                img.height = int(img.height * oran)
+            # KANKA: A ILE F ARASINA TAM OTURMASI İÇİN GENİŞLİK AYARI
+            oran = 700 / img.width
+            img.width = 700
+            img.height = int(img.height * oran)
                 
             ws.add_image(img, 'A1')
-            row_idx = 16 # Resmin boyutuna göre tabloyu daha da aşağıya aldık
+            row_idx = 14 # Resmin boyutuna göre tabloyu aşağıya aldık
         else:
-            ws[f'B{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
-            ws[f'B{row_idx}'].font = Font(bold=True, size=14)
+            ws[f'A{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
+            ws[f'A{row_idx}'].font = Font(bold=True, size=14)
             row_idx += 3
             ws[f'C{row_idx}'] = "PROFORMA FATURA"
             ws[f'C{row_idx}'].font = Font(bold=True, size=16)
             ws[f'C{row_idx}'].alignment = Alignment(horizontal="center")
             row_idx += 2
-            ws.cell(row=row_idx, column=len(dataframe.columns)+1).value = f"TARIH: {tarih}"
-            ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
-            row_idx += 2
+        
+        # KANKA: Fatura Kesilen ve Tarih Yazısı
+        ws.cell(row=row_idx, column=1).value = "Fatura Kesilen:"
+        ws.cell(row=row_idx, column=1).font = Font(bold=True)
+        
+        tarih_sutun = len(dataframe.columns)
+        ws.cell(row=row_idx+1, column=tarih_sutun).value = "Fatura Tarihi:"
+        ws.cell(row=row_idx+1, column=tarih_sutun).font = Font(bold=True)
+        ws.cell(row=row_idx+1, column=tarih_sutun+1).value = tarih
+        
+        row_idx += 3
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     set_excel_col_widths(ws, headers)
     
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     
-    # --- BEJ RENKLİ TABLO BAŞLIĞI (EXCEL İÇİN) ---
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") 
     else:
-        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") # Krem/Bej rengi
+        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") 
         
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
@@ -539,7 +541,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     row_idx += 2
     
     for satir in notlar.split('\n'):
-        ws[f'B{row_idx}'] = satir
+        ws[f'A{row_idx}'] = satir
         row_idx += 1
         
     output = io.BytesIO()
