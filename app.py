@@ -11,7 +11,6 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
-from openpyxl.drawing.image import Image as xlImage
 
 st.set_page_config(layout="wide", page_title="Doküman Oluşturucu Platform", initial_sidebar_state="expanded")
 
@@ -34,7 +33,6 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
-        # Excel Fatura Taslağına Uygun Sütunlar
         data = {
             'Marka': ['Örnek Marka', ''],
             'Açıklama': ['Örnek Açıklama', ''],
@@ -201,14 +199,27 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         p_title = doc.add_paragraph()
         p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}").bold = True
     else:
-        # Fatura şablonu için üstten antet payı bırakıldı
-        doc.add_paragraph("\n" * 5)
+        # Fatura Native Word Taslağı
+        doc.add_paragraph()
+        
+        p_header = doc.add_paragraph()
+        r1 = p_header.add_run("INNOMARİN\n")
+        r1.bold = True
+        r1.font.color.rgb = RGBColor(0, 51, 153)
+        r1.font.size = Pt(20)
+        r2 = p_header.add_run("SAILING INTO THE FUTURE\n")
+        r2.italic = True
+        
         p_title = doc.add_paragraph()
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_title.add_run("PROFORMA FATURA").bold = True
+        
         p_date = doc.add_paragraph()
         p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_date.add_run(f"TARİH: {tarih}").bold = True
+        p_date.add_run(f"Fatura Tarihi: {tarih}").bold = True
+        
+        doc.add_paragraph("Fatura Kesilen:\nMüşteri Adı: ..............................................................\nAdres: ........................................................................\nFatura Numarası: ........................")
+        doc.add_paragraph("_" * 75)
     
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = 'Table Grid'
@@ -292,30 +303,44 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.set_line_width(0.3)
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
-                    if os.path.exists("watermark.png"): self.image("watermark.png", x=30, y=80, w=150)
                 else:
-                    # Yeni Fatura Şablonu: Arkaplan varsa PDF'e entegre edilecek ve üst boşluk bırakılacak
-                    if os.path.exists("arkaplan.png"): 
-                        self.image("arkaplan.png", 0, 0, 210, 297)
-                    self.set_y(70) # Logo payı için tablo 70mm aşağıdan başlayacak
+                    # Fatura PDF Taslağı NATIVE (Resimsiz Saf Çizim)
+                    self.set_y(15)
+                    self.set_font('Arial', 'B', 22)
+                    self.set_text_color(0, 51, 153) # Mavi
+                    self.cell(100, 8, cevir_tr('INNOMARIN'), 0, 0, 'L')
+                    
                     self.set_font('Arial', 'B', 16)
                     self.set_text_color(0, 0, 0)
-                    self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
+                    self.cell(90, 8, cevir_tr('Proforma Fatura'), 0, 1, 'R')
+                    
+                    self.set_font('Arial', 'I', 9)
+                    self.set_text_color(100, 100, 100) # Gri
+                    self.cell(100, 5, cevir_tr('SAILING INTO THE FUTURE'), 0, 1, 'L')
                     self.ln(5)
+                    
+                    self.set_font('Arial', '', 9)
+                    self.set_text_color(0, 0, 0)
+                    self.cell(0, 5, cevir_tr('info@innomarin.com | www.innomarin.com'), 0, 1, 'L')
+                    self.cell(0, 5, cevir_tr('Kılavuz Sok. No: 16/6 Heybeliada / ISTANBUL'), 0, 1, 'L')
+                    
+                    self.set_draw_color(200, 200, 200)
+                    self.line(10, self.get_y()+2, 200, self.get_y()+2)
+                    self.ln(6)
+                    
+                    self.set_font('Arial', 'B', 10)
+                    self.cell(100, 5, cevir_tr('Fatura Kesilen:'), 0, 0, 'L')
+                    self.cell(90, 5, cevir_tr(f'Fatura Tarihi: {tarih}'), 0, 1, 'R')
+                    
+                    self.set_font('Arial', '', 9)
+                    self.cell(100, 5, cevir_tr('Musteri Adi: ....................................................'), 0, 0, 'L')
+                    self.cell(90, 5, cevir_tr('Fatura Numarasi: ........................'), 0, 1, 'R')
+                    self.cell(0, 5, cevir_tr('Adres: ..........................................................'), 0, 1, 'L')
+                    self.ln(8)
             else:
-                if sablon_tipi != "⚓ INNOMAR Özel Teklif":
-                    self.set_y(70)
-                else:
-                    self.ln(15)
+                self.ln(15)
 
     pdf = PDF()
-    
-    # Fatura ise kenarlardan ve üstten taslağa uyumlu boşluklar, değilse standart boşluk.
-    if sablon_tipi != "⚓ INNOMAR Özel Teklif":
-        pdf.set_margins(left=20, top=70, right=20)
-    else:
-        pdf.set_margins(left=15, top=15, right=15)
-        
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
     
@@ -323,10 +348,11 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_text_color(0, 0, 0)
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
+        pdf.cell(60, 10, f'* DATE/TARIH: {tarih}', 0, 1, 'R')
     else:
-        pdf.cell(130, 10, '', 0, 0, 'L') 
+        # Faturada tarih yukarıda olduğu için buraya eklemiyoruz
+        pass 
         
-    pdf.cell(60, 10, f'* DATE/TARIH: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
@@ -394,10 +420,10 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     ws = wb.active
     ws.title = "Belge"
     ws.sheet_view.showGridLines = False
-    row_idx = 1
     birim_sutun = get_birim_col(dataframe.columns)
     
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        row_idx = 1
         if os.path.exists("logo.png"):
             img = xlImage("logo.png")
             ws.add_image(img, 'B1')
@@ -417,121 +443,73 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).value = f"* DATE: {tarih}"
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
-        
-        headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
-        set_excel_col_widths(ws, headers)
-        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-        
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=row_idx, column=col_num)
-            cell.value = str(header)
-            cell.font = Font(bold=True)
-            cell.border = thin_border
-            cell.fill = gray_fill
-            align = get_alignment(header)
-            if align == 'R': cell.alignment = Alignment(horizontal="right")
-            elif align == 'C': cell.alignment = Alignment(horizontal="center")
-            else: cell.alignment = Alignment(horizontal="left")
-        row_idx += 1
-        
-        for index, row in dataframe.iterrows():
-            cell = ws.cell(row=row_idx, column=1)
-            cell.value = index + 1
-            cell.border = thin_border
-            cell.alignment = Alignment(horizontal="center")
-            
-            for c_idx, col_name in enumerate(dataframe.columns):
-                val = row[col_name]
-                cell = ws.cell(row=row_idx, column=c_idx+2)
-                align = get_alignment(col_name)
-                
-                if gizle_aktif and col_name == birim_sutun:
-                    cell.value = "***"
-                    cell.alignment = Alignment(horizontal="center")
-                elif col_name == dataframe.columns[-1]: 
-                    try:
-                        fiyat = float(str(val).replace(',', '.'))
-                        if pd.isna(fiyat) or fiyat <= 0:
-                            cell.value = "-NIL-"
-                        else:
-                            cell.value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
-                    except:
-                        cell.value = "-NIL-"
-                    if align == 'R': cell.alignment = Alignment(horizontal="right")
-                    elif align == 'C': cell.alignment = Alignment(horizontal="center")
-                    else: cell.alignment = Alignment(horizontal="left")
-                else:
-                    cell.value = str(val)
-                    if align == 'R': cell.alignment = Alignment(horizontal="right")
-                    elif align == 'C': cell.alignment = Alignment(horizontal="center")
-                    else: cell.alignment = Alignment(horizontal="left")
-                    
-                cell.border = thin_border
-            row_idx += 1
     else:
-        # FATURA İÇİN EXCEL TASLAĞINA UYGUN YERLEŞİM (Başlık 7. Satırda)
+        # Fatura Excel Taslağı (Senin CSV'ne göre Row 7'den başlıyor)
         row_idx = 7
         ws[f'A{row_idx}'] = "PROFORMA FATURA"
         ws[f'A{row_idx}'].font = Font(bold=True, size=16)
-        
-        row_idx += 1
-        ws.cell(row=row_idx, column=len(dataframe.columns)).value = "TARİH:"
-        ws.cell(row=row_idx, column=len(dataframe.columns)+1).value = tarih
-        ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
-        
-        row_idx += 2 # Tablo 10. satırda başlar
-        headers = ['Sıra'] + list(dataframe.columns)
-        set_excel_col_widths(ws, headers)
-        thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-        
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=row_idx, column=col_num)
-            cell.value = str(header)
-            cell.font = Font(bold=True)
-            cell.border = thin_border
-            cell.fill = gray_fill
-            align = get_alignment(header)
-            if align == 'R': cell.alignment = Alignment(horizontal="right")
-            elif align == 'C': cell.alignment = Alignment(horizontal="center")
-            else: cell.alignment = Alignment(horizontal="left")
         row_idx += 1
         
-        for index, row in dataframe.iterrows():
-            cell = ws.cell(row=row_idx, column=1)
-            cell.value = index + 1
-            cell.border = thin_border
-            cell.alignment = Alignment(horizontal="center")
+        # Tarih bilgisi sütunları (Örn: Toplam Fiyat'ın bir öncesi ve altı)
+        tarih_etiket_col = len(dataframe.columns)
+        ws.cell(row=row_idx, column=tarih_etiket_col).value = "TARİH:"
+        ws.cell(row=row_idx, column=tarih_etiket_col+1).value = tarih
+        ws.cell(row=row_idx, column=tarih_etiket_col+1).font = Font(bold=True)
+        row_idx += 2
+    
+    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
+    
+    set_excel_col_widths(ws, headers)
+    
+    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    
+    for col_num, header in enumerate(headers, 1):
+        cell = ws.cell(row=row_idx, column=col_num)
+        cell.value = str(header)
+        cell.font = Font(bold=True)
+        cell.border = thin_border
+        cell.fill = gray_fill
+        align = get_alignment(header)
+        if align == 'R': cell.alignment = Alignment(horizontal="right")
+        elif align == 'C': cell.alignment = Alignment(horizontal="center")
+        else: cell.alignment = Alignment(horizontal="left")
+    row_idx += 1
+    
+    for index, row in dataframe.iterrows():
+        cell = ws.cell(row=row_idx, column=1)
+        cell.value = index + 1
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal="center")
+        
+        for c_idx, col_name in enumerate(dataframe.columns):
+            val = row[col_name]
+            cell = ws.cell(row=row_idx, column=c_idx+2)
+            align = get_alignment(col_name)
             
-            for c_idx, col_name in enumerate(dataframe.columns):
-                val = row[col_name]
-                cell = ws.cell(row=row_idx, column=c_idx+2)
-                align = get_alignment(col_name)
-                
-                if gizle_aktif and col_name == birim_sutun:
-                    cell.value = "***"
-                    cell.alignment = Alignment(horizontal="center")
-                elif col_name == dataframe.columns[-1]: 
-                    try:
-                        fiyat = float(str(val).replace(',', '.'))
-                        if pd.isna(fiyat) or fiyat <= 0:
-                            cell.value = "-NIL-"
-                        else:
-                            cell.value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
-                    except:
+            if gizle_aktif and col_name == birim_sutun:
+                cell.value = "***"
+                cell.alignment = Alignment(horizontal="center")
+            elif col_name == dataframe.columns[-1]: 
+                try:
+                    fiyat = float(str(val).replace(',', '.'))
+                    if pd.isna(fiyat) or fiyat <= 0:
                         cell.value = "-NIL-"
-                    if align == 'R': cell.alignment = Alignment(horizontal="right")
-                    elif align == 'C': cell.alignment = Alignment(horizontal="center")
-                    else: cell.alignment = Alignment(horizontal="left")
-                else:
-                    cell.value = str(val)
-                    if align == 'R': cell.alignment = Alignment(horizontal="right")
-                    elif align == 'C': cell.alignment = Alignment(horizontal="center")
-                    else: cell.alignment = Alignment(horizontal="left")
-                    
-                cell.border = thin_border
-            row_idx += 1
+                    else:
+                        cell.value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except:
+                    cell.value = "-NIL-"
+                if align == 'R': cell.alignment = Alignment(horizontal="right")
+                elif align == 'C': cell.alignment = Alignment(horizontal="center")
+                else: cell.alignment = Alignment(horizontal="left")
+            else:
+                cell.value = str(val)
+                if align == 'R': cell.alignment = Alignment(horizontal="right")
+                elif align == 'C': cell.alignment = Alignment(horizontal="center")
+                else: cell.alignment = Alignment(horizontal="left")
+                
+            cell.border = thin_border
+        row_idx += 1
         
     tot_col = len(dataframe.columns)
     val_col = len(dataframe.columns) + 1
