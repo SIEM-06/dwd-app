@@ -50,15 +50,13 @@ if 'veri_df' not in st.session_state:
 mevcut_sutunlar = ", ".join(st.session_state.veri_df.columns)
 yeni_sutunlar_str = st.text_input("Tablo Sütunları:", mevcut_sutunlar)
 
-# Kullanıcının girdiği virgüllü metni listeye çevirip temizliyoruz
 yeni_sutunlar = [s.strip() for s in yeni_sutunlar_str.split(",") if s.strip()]
-yeni_sutunlar = list(dict.fromkeys(yeni_sutunlar)) # Aynı isimde iki sütun olmasını engeller
+yeni_sutunlar = list(dict.fromkeys(yeni_sutunlar)) 
 
 if len(yeni_sutunlar) < 2:
-    st.warning("Lütfen tabloda en az 2 sütun bırakın (Örn: İşlem, Fiyat)")
+    st.warning("Lütfen tabloda en az 2 sütun bırakın (Örn: INSPECTION REMARK, PRICE)")
     yeni_sutunlar = st.session_state.veri_df.columns.tolist()
 
-# Eğer sütunlarda değişiklik yapıldıysa DataFrame'i güncelle
 if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     eski_df = st.session_state.veri_df
     yeni_df = pd.DataFrame(columns=yeni_sutunlar)
@@ -66,14 +64,21 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         if col in eski_df.columns:
             yeni_df[col] = eski_df[col]
         else:
-            yeni_df[col] = "" # Yeni eklenen sütunun içini boş bırak
+            yeni_df[col] = "" 
+            
+    # HATA ÇÖZÜMÜ: Son sütunu zorla sayı formatına çeviriyoruz ki çökmesin
+    son_sutun_adi = yeni_sutunlar[-1]
+    yeni_df[son_sutun_adi] = pd.to_numeric(yeni_df[son_sutun_adi], errors='coerce').fillna(0.0)
+    
     st.session_state.veri_df = yeni_df
     st.rerun()
 
 df = st.session_state.veri_df
-son_sutun = df.columns[-1] # En son sütun her zaman fiyat olarak kabul edilir
+son_sutun = df.columns[-1] 
 
-# Arayüzdeki tablo ayarları
+# Güvenlik için arayüze basmadan önce son sütunun kesin sayı olduğundan emin oluyoruz
+df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
+
 col_config = {}
 for col in df.columns[:-1]:
     col_config[col] = st.column_config.TextColumn(col)
@@ -89,7 +94,6 @@ duzenlenmis_df = st.data_editor(
 )
 
 # --- HESAPLAMALAR ---
-# Sadece en son sütundaki rakamları topla
 fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
 ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
@@ -117,12 +121,17 @@ varsayilan_not = """* IMPORTANT NOTICE;
 - PAYMENT WILL BE ACCEPTED AS BELOW;
     - %50 BEFORE WORK BEGINS,
     - %50 UPON COMPLETION OF THE WORK."""
-kullanici_notu = st.text_area("Bu alana yazdığınız her şey tabloların altına eklenecektir:", value=varsayilan_not, height=200)
+
+# NOTLARIN HAFIZADA KALMASI İÇİN SESSION STATE KULLANIMI
+if "not_alani" not in st.session_state:
+    st.session_state.not_alani = varsayilan_not
+
+st.text_area("Bu alana yazdığınız her şey tabloların altına eklenecektir:", key="not_alani", height=200)
 
 st.write("---")
 
 # ==========================================
-# WORD OLUŞTURMA MOTORU (DİNAMİK)
+# WORD OLUŞTURMA MOTORU
 # ==========================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     doc = Document()
@@ -148,7 +157,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     run_title.bold = True
     run_title.font.size = Pt(10)
     
-    # Dinamik Sütun Sayısı
     table = doc.add_table(rows=1, cols=len(dataframe.columns) + 1)
     table.style = 'Table Grid'
     
@@ -167,7 +175,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
         row_cells[0].text = str(index + 1)
         for idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
-            if col_name == dataframe.columns[-1]: # Son Sütun (Fiyat)
+            if col_name == dataframe.columns[-1]: 
                 fiyat = pd.to_numeric(val, errors='coerce')
                 if pd.isna(fiyat) or fiyat <= 0:
                     row_cells[idx+1].text = "-NIL-"
@@ -176,7 +184,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
             else:
                 row_cells[idx+1].text = str(val)
                 
-    # Genişlik Ayarları (Word)
     mid_cols = dataframe.columns[:-1]
     w_mids = []
     if len(mid_cols) == 1:
@@ -222,7 +229,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     return bio.getvalue()
 
 # ==========================================
-# EXCEL OLUŞTURMA MOTORU (DİNAMİK)
+# EXCEL OLUŞTURMA MOTORU
 # ==========================================
 def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     wb = Workbook()
@@ -255,7 +262,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     headers = ['ITEM NO'] + list(dataframe.columns)
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
     
-    # Sütun Genişliklerini Ayarla
     ws.column_dimensions['A'].width = 8
     harfler = 'BCDEFGHIJKLMNOPQRSTUVWXYZ'
     mid_cols = dataframe.columns[:-1]
@@ -331,7 +337,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     return output.getvalue()
 
 # ==========================================
-# PDF OLUŞTURMA MOTORU (DİNAMİK)
+# PDF OLUŞTURMA MOTORU
 # ==========================================
 def cevir_tr(metin):
     tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
@@ -380,7 +386,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m):
     pdf.cell(60, 10, f'* DATE: {tarih}', 0, 1, 'R')
     pdf.ln(2)
     
-    # Dinamik Sütun Genişlikleri Hesaplama
     cols = list(dataframe.columns)
     mid_cols = cols[:-1]
     last_col = cols[-1]
@@ -463,8 +468,8 @@ st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, st.session_state.not_alani, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
