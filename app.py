@@ -34,7 +34,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
-        # KANKA BURASI FATURA SÜTUNLARI
+        # KANKA BURASI SENİN BEJ TABLONA UYGUN YENİ SÜTUN YERLEŞİMİ
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
             'Birim Fiyatı': ['1000', '500'],
@@ -42,8 +42,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
             'KDV': ['%20', '%20'],
             'Tutar': [1000.0, 1000.0]
         }
-        # Fatura için not alanı tamamen boş başlatılır
-        st.session_state.not_alani = "" 
+        st.session_state.not_alani = "" # Faturada görünmez alan için boş bırakıldı
     
     st.session_state.veri_df = pd.DataFrame(data)
     st.rerun()
@@ -121,7 +120,6 @@ col_c.metric("Genel Toplam", genel_str)
 st.write("---")
 
 st.subheader("📄 Belge Altı Notları")
-# Faturadaysa silik metin olarak uyarı verir, teklifteyse direkt dolu gelir
 st.text_area("Bu alana yazdığınız metin belgenin altına eklenecektir:", key="not_alani", height=150, placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz...")
 
 if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
@@ -207,7 +205,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             p_logo = doc.add_paragraph()
             p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p_logo.add_run().add_picture("ust_bar.png", width=Cm(16))
-            doc.add_paragraph() # Tablodan önce boşluk
+            doc.add_paragraph("\n\n") # Tablodan önce boşluk
         else:
             doc.add_paragraph("FİRMA LOGOSU VE BİLGİLERİ\n(Lütfen 'ust_bar.png' dosyasını klasöre ekleyin)").runs[0].bold = True
             doc.add_paragraph("_" * 75)
@@ -297,15 +295,15 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.set_text_color(0, 51, 153)
                     self.cell(0, 5, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
                     self.set_draw_color(0, 51, 153)
-                    self.set_line_width(0.3)
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
                     # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
                     if os.path.exists("ust_bar.png"):
-                        # A4 genişliği 210mm'dir.
-                        self.image("ust_bar.png", x=0, y=0, w=210)
-                        self.set_y(65) # Üst logodan tabloya kadar inmesi gereken pay
+                        # Resmi biraz daha dar ve ortalı koyduk (Çok büyük olmaması için w=180, x=15)
+                        self.image("ust_bar.png", x=15, y=5, w=180)
+                        # Tablonun resmin üstüne binmemesi için Y eksenini 90'a çektik.
+                        self.set_y(90) 
                     else:
                         self.set_font('Arial', 'B', 12)
                         self.set_text_color(0, 0, 0)
@@ -331,21 +329,21 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
     widths = get_pdf_widths(headers)
     
-    pdf.set_draw_color(0, 0, 0)
+    # --- KANKA BEJ RENKLİ TABLO BAŞLIĞI BURASI ---
+    pdf.set_draw_color(0, 0, 0) 
     
-    # --- BEJ RENKLİ TABLO BAŞLIĞI ---
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        pdf.set_fill_color(255, 255, 255) # Normal beyaz
+        pdf.set_fill_color(255, 255, 255) 
     else:
-        pdf.set_fill_color(235, 228, 213) # Fatura İçin Şık Bej/Krem Rengi
+        pdf.set_fill_color(245, 245, 235) # Fatura İçin Orijinal Bej (Krem) Rengi
         
     pdf.set_font('Arial', 'B', 9)
     for idx, header in enumerate(headers):
-        pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, align='C', fill=True)
+        pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, align='C', fill=True) 
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
-    pdf.set_fill_color(255, 255, 255) # Sütun içleri beyaz
+    pdf.set_fill_color(255, 255, 255) 
     for index, row in dataframe.iterrows():
         pdf.cell(widths[0], 8, str(index + 1), 1, align='C', fill=True)
         for c_idx, col_name in enumerate(dataframe.columns):
@@ -424,13 +422,15 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # EXCEL İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
-        if os.path.exists("ust_bar.png"):
-            img = xlImage("ust_bar.png")
+        # EXCEL İÇİN AYRI ÜST BAR FOTOĞRAFI EKLENİYOR
+        excel_img = "excel_ust_bar.png" if os.path.exists("excel_ust_bar.png") else "ust_bar.png"
+        
+        if os.path.exists(excel_img):
+            img = xlImage(excel_img)
             ws.add_image(img, 'A1')
-            row_idx = 14 # Fotoğraftan sonra tabloya kadar bırakılan boşluk
+            row_idx = 16 # Resmin boyutuna göre tabloyu daha da aşağıya aldık
         else:
-            ws[f'B{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (ust_bar.png ekleyin)"
+            ws[f'B{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
             ws[f'B{row_idx}'].font = Font(bold=True, size=14)
             row_idx += 3
             ws[f'C{row_idx}'] = "PROFORMA FATURA"
@@ -448,9 +448,9 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     
     # --- BEJ RENKLİ TABLO BAŞLIĞI (EXCEL İÇİN) ---
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") # Standart gri
+        bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") 
     else:
-        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") # Kurumsal Krem/Bej rengi
+        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") 
         
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
