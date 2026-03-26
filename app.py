@@ -32,7 +32,6 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
-        # Orijinal CSV'ye uygun default veri seti
         data = {
             'Marka': ['Örnek Marka', ''],
             'Açıklama': ['Örnek Açıklama', ''],
@@ -75,7 +74,7 @@ if len(yeni_sutunlar) < 2:
     yeni_sutunlar = st.session_state.veri_df.columns.tolist()
 
 if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
-    eski_df = st.session_state.veri_df
+    eski_df = st.session_state.veri_df.copy()
     yeni_df = pd.DataFrame(columns=yeni_sutunlar)
     for col in yeni_sutunlar:
         if col in eski_df.columns:
@@ -83,14 +82,23 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         else:
             yeni_df[col] = "" 
             
-    son_sutun_adi = yeni_sutunlar[-1]
-    yeni_df[son_sutun_adi] = pd.to_numeric(yeni_df[son_sutun_adi], errors='coerce').fillna(0.0)
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-df = st.session_state.veri_df
+# DTYPE KORUMASI VE TEMİZLİK (Hata Çözümü Burası)
+df = st.session_state.veri_df.copy()
 son_sutun = df.columns[-1] 
-df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
+
+for col in df.columns:
+    if col == son_sutun:
+        # Son sütun mutlaka sayı olmalı
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
+    else:
+        # Geri kalanlar kesinlikle metin olmalı ve boş "nan" yazıları silinmeli
+        df[col] = df[col].astype(str)
+        df[col] = df[col].apply(lambda x: "" if str(x).lower() in ['nan', 'none', '<na>'] else x)
+
+st.session_state.veri_df = df
 
 col_config = {}
 for col in df.columns[:-1]:
@@ -99,7 +107,16 @@ col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {se
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True)
+# Eşsiz Key ile tablonun sütun değiştiğinde çökmesini engelliyoruz
+tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
+
+duzenlenmis_df = st.data_editor(
+    df, 
+    column_config=col_config, 
+    num_rows="dynamic", 
+    use_container_width=True,
+    key=tablo_key
+)
 
 # --- HESAPLAMALAR ---
 fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
@@ -173,7 +190,6 @@ def cevir_tr(metin):
 
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi):
     doc = Document()
-    # CSV'deki gibi başlığı "Sıra" yaptık
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
@@ -235,7 +251,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     tot_table.style = 'Table Grid'
     tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
     
-    # Orijinal CSV'deki isimler
     tot_table.rows[0].cells[0].text = "TOTAL PRICE" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "Ara Toplam"
     tot_table.rows[0].cells[1].text = a_str
     tot_table.rows[1].cells[0].text = "VAT (20%)" if sablon_tipi == "⚓ INNOMAR Özel Teklif" else "KDV % 20"
@@ -285,7 +300,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.ln(10)
                     if os.path.exists("watermark.png"): self.image("watermark.png", x=30, y=80, w=150)
                 else:
-                    self.ln(15) # CSV'deki gibi üst boşluk
+                    self.ln(15) 
                     self.set_font('Arial', 'B', 16)
                     self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
                     self.ln(5)
@@ -303,7 +318,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     else:
         pdf.cell(130, 10, '', 0, 0, 'L') 
         
-    # PDF Orijinal uyum
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.cell(60, 10, f'* DATE: {tarih}', 0, 1, 'R')
     else:
@@ -372,7 +386,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     else:
         pdf.set_font('Arial', 'B', 10)
         pdf.set_text_color(0, 0, 0)
-        # CSV'deki gibi ortaya/sola hizalı Logo alanı
         pdf.cell(0, 5, cevir_tr('FİRMA LOGOSU'), 0, 1, 'C')
         pdf.cell(0, 5, cevir_tr('VE BİLGİLERİ'), 0, 1, 'C')
     
@@ -405,7 +418,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # CSV'deki gibi en üstte 6 satır boşluk
         row_idx = 7
         ws[f'B{row_idx}'] = "PROFORMA FATURA"
         ws[f'B{row_idx}'].font = Font(bold=True, size=16)
@@ -488,7 +500,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         row_idx += 1
         
     if sablon_tipi != "⚓ INNOMAR Özel Teklif":
-        # CSV formatındaki C Sütunu Firma Logosu 
         row_idx += 2
         ws[f'C{row_idx}'] = "FİRMA LOGOSU"
         ws[f'C{row_idx}'].font = Font(bold=True)
