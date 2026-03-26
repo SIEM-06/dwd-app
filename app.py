@@ -34,11 +34,12 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
+        # KANKA: KDV ve Birim Fiyatı yer değiştirdi
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
-            'Birim Fiyatı': ['1000', '500'],
-            'Adet': ['1', '2'],
             'KDV': ['%20', '%20'],
+            'Adet': ['1', '2'],
+            'Birim Fiyatı': ['1000', '500'],
             'Tutar': [1000.0, 1000.0]
         }
         st.session_state.not_alani = "" 
@@ -296,7 +297,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
-                    # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
                     if os.path.exists("ust_bar.png"):
                         self.image("ust_bar.png", x=0, y=0, w=210)
                         self.set_y(80) 
@@ -327,7 +327,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     
     pdf.set_draw_color(0, 0, 0) 
     
-    # PDF TABLO BAŞLIĞI ARKA PLAN RENGİ (Sadece PDF'te Beyaz)
+    # KANKA: PDF'TE ARKA PLAN RENGİ BEYAZ OLDU
     pdf.set_fill_color(255, 255, 255) 
         
     pdf.set_font('Arial', 'B', 9)
@@ -358,9 +358,9 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             pdf.cell(widths[c_idx+1], 8, yazilacak, 1, align=align, fill=True)
         pdf.ln()
         
-    # --- TAŞMA SORUNU ÇÖZÜLEN TOPLAM ALANI ---
+    # KANKA: TAŞMA SORUNU ÇÖZÜLEN TOPLAM ALANI
     w_val = widths[-1]
-    w_label = 40  # GENEL TOPLAM yazısının sığması için garanti genişlik
+    w_label = 40  # Sabit Genişlik - Sıkışmayı engeller
     w_empty = sum(widths) - w_val - w_label
     
     pdf.set_font('Arial', '', 9)
