@@ -15,6 +15,27 @@ from openpyxl.drawing.image import Image as xlImage
 
 st.set_page_config(layout="wide", page_title="Doküman Oluşturucu Platform", initial_sidebar_state="expanded")
 
+# ==========================================
+# ZIRHLI YARDIMCI FONKSİYONLAR
+# ==========================================
+def format_fiyat(val, kur_m):
+    """Hücreye ne girilirse girilsin çökmeyi engelleyen zırhlı fiyat formatlayıcı."""
+    try:
+        fiyat = float(val)
+        if pd.isna(fiyat) or fiyat <= 0:
+            return "-NIL-"
+        return f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+    except (ValueError, TypeError):
+        return "-NIL-"
+
+def cevir_tr(metin):
+    tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
+    for k, v in tr_map.items(): metin = metin.replace(k, v)
+    return metin
+
+# ==========================================
+# PLATFORM ŞABLON SEÇİCİ
+# ==========================================
 st.sidebar.markdown("### ⚙️ Sistem Ayarları")
 secili_sablon = st.sidebar.radio(
     "📝 Çalışma Şablonunu Seçin:",
@@ -23,7 +44,6 @@ secili_sablon = st.sidebar.radio(
 
 gizle_checkbox = st.sidebar.checkbox("🔒 Birim Fiyatını Çıktılarda Gizle (Sansürle)", value=False, help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu '***' olarak görünür.")
 
-# --- İLK VERİLERİN YÜKLENMESİ (HATA ÇÖZÜMÜ İÇİN FLOAT YAPILDI) ---
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
     st.session_state.aktif_sablon = secili_sablon
     if secili_sablon == "⚓ INNOMAR Özel Teklif":
@@ -38,7 +58,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
             'Marka': ['Örnek Marka', ''],
             'Açıklama': ['Örnek Açıklama', ''],
             'KDV': ['%20', ''],
-            'Adet': [1.0, 2.0], # Sayılar baştan ondalıklı verildi ki hata vermesin
+            'Adet': [1.0, 2.0],
             'Birim Fiyat': [1000.0, 500.0],
             'Toplam Fiyat': [1000.0, 1000.0]
         }
@@ -49,6 +69,7 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
 
 st.markdown(f"<h2 style='text-align: center;'>{secili_sablon.upper()} SİSTEMİ</h2>", unsafe_allow_html=True)
 
+# --- ÜST PANEL: TARİH VE PARA BİRİMİ ---
 col_t, col_kur = st.columns([1, 1])
 secilen_tarih = col_t.date_input("Belge Tarihi", datetime.date.today())
 tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
@@ -79,17 +100,25 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         if col in eski_df.columns:
             yeni_df[col] = eski_df[col]
         else:
-            yeni_df[col] = None # Yeni sütunlar bomboş başlatılır, hata yapmaz
+            yeni_df[col] = "" 
             
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-df = st.session_state.veri_df
+# --- VERİ TİPİ DÜZENLEME ALANI ---
+df = st.session_state.veri_df.copy()
 son_sutun = df.columns[-1] 
-
-# Akıllı Sütun Bulucu
-adet_sutunu = next((c for c in df.columns if str(c).strip().lower() in ["adet", "miktar"]), None)
 birim_sutunu = next((c for c in df.columns if str(c).strip().lower() in ["birim fiyat", "birim fiyatı"]), None)
+adet_sutunu = next((c for c in df.columns if str(c).strip().lower() in ["adet", "miktar"]), None)
+
+for col in df.columns:
+    if col == son_sutun or col in [adet_sutunu, birim_sutunu]:
+        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0.0)
+    else:
+        df[col] = df[col].astype(str)
+        df[col] = df[col].apply(lambda x: "" if str(x).lower() in ['nan', 'none', '<na>', 'null'] else x)
+
+st.session_state.veri_df = df
 
 col_config = {}
 for col in df.columns[:-1]:
@@ -102,7 +131,6 @@ col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {se
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-# Eşsiz key sayesinde tablo yapısı değişince eski hafızayı siler
 tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
 duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True, key=tablo_key)
 
@@ -174,11 +202,9 @@ def set_excel_col_widths(ws, headers):
         else:
             ws.column_dimensions[col_letter].width = 20
 
-def cevir_tr(metin):
-    tr_map = {'ş':'s', 'Ş':'S', 'ı':'i', 'İ':'I', 'ğ':'g', 'Ğ':'G', 'ü':'u', 'Ü':'U', 'ö':'o', 'Ö':'O', 'ç':'c', 'Ç':'C'}
-    for k, v in tr_map.items(): metin = metin.replace(k, v)
-    return metin
-
+# ==========================================
+# ÇIKTI MOTORLARI
+# ==========================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle, b_sutunu):
     doc = Document()
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
@@ -231,8 +257,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
                 row_cells[c_idx+1].text = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(str(val).replace(',', '.'), errors='coerce')
-                row_cells[c_idx+1].text = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                row_cells[c_idx+1].text = format_fiyat(val, kur_m)
             else:
                 row_cells[c_idx+1].text = str(val) if not pd.isna(val) else ""
                 
@@ -334,8 +359,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                 yazilacak_metin = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(str(val).replace(',', '.'), errors='coerce')
-                yazilacak_metin = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                yazilacak_metin = format_fiyat(val, kur_m)
             else:
                 yazilacak_metin = "" if pd.isna(val) else cevir_tr(str(val))
                 
@@ -454,11 +478,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
                 cell.value = "***"
                 cell.alignment = Alignment(horizontal="center")
             elif col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(str(val).replace(',', '.'), errors='coerce')
-                if pd.isna(fiyat) or fiyat <= 0:
-                    cell.value = "-NIL-"
-                else:
-                    cell.value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                cell.value = format_fiyat(val, kur_m)
                 if align == 'R': cell.alignment = Alignment(horizontal="right")
                 elif align == 'C': cell.alignment = Alignment(horizontal="center")
                 else: cell.alignment = Alignment(horizontal="left")
