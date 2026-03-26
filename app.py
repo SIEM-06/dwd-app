@@ -15,11 +15,24 @@ st.set_page_config(layout="wide", page_title="Innomar Teklif Portali", initial_s
 
 st.markdown("<h2 style='text-align: center;'>⚓ INNOMAR TEKLİF SİSTEMİ</h2>", unsafe_allow_html=True)
 
-# --- ÜST PANEL: TARİH VE SÜTUN İSİMLERİ ---
-col_t, col_h1, col_h2, col_h3 = st.columns([1, 1, 1, 1])
+# --- ÜST PANEL: TARİH, SÜTUN İSİMLERİ VE PARA BİRİMİ ---
+col_t, col_kur, col_h1, col_h2, col_h3 = st.columns([1, 1, 1, 1, 1])
+
 secilen_tarih = col_t.date_input("Teklif Tarihi", datetime.date.today())
 tarih_metni = secilen_tarih.strftime("%d.%m.%Y")
 dosya_tarihi = secilen_tarih.strftime("%d_%m_%Y")
+
+# Para Birimi Seçimi
+kur_secimi = col_kur.selectbox("Para Birimi", ["Euro (€)", "Dolar ($)", "Türk Lirası (₺)"])
+if "Euro" in kur_secimi:
+    sembol = "€"
+    kur_metin = "EURO"
+elif "Dolar" in kur_secimi:
+    sembol = "$"
+    kur_metin = "USD"
+else:
+    sembol = "₺"
+    kur_metin = "TL"
 
 baslik_1 = col_h1.text_input("1. Sütun Adı", "INSPECTION REMARK")
 baslik_2 = col_h2.text_input("2. Sütun Adı", "UNIT")
@@ -38,25 +51,26 @@ if 'veri_df' not in st.session_state:
 
 df = st.session_state.veri_df
 
-# Sütun isimlerini dinamik göster
+# Sütun isimlerini ve para birimi sembolünü dinamik göster
 duzenlenmis_df = st.data_editor(
     df,
     column_config={
         "İşlem": st.column_config.TextColumn(baslik_1),
         "Birim": st.column_config.TextColumn(baslik_2),
-        "Fiyat": st.column_config.NumberColumn(baslik_3, format="%d"),
+        "Fiyat": st.column_config.NumberColumn(baslik_3, format=f"%d {sembol}"),
     },
     num_rows="dynamic",
     use_container_width=True 
 )
 
+# --- HESAPLAMALAR ---
 ara_toplam = duzenlenmis_df['Fiyat'].sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
 
-ara_str = f"{ara_toplam:,.0f}".replace(",", ".") + " EURO"
-kdv_str = f"{kdv:,.0f}".replace(",", ".") + " EURO"
-genel_str = f"{genel_toplam:,.0f}".replace(",", ".") + " EURO"
+ara_str = f"{ara_toplam:,.0f}".replace(",", ".") + f" {kur_metin}"
+kdv_str = f"{kdv:,.0f}".replace(",", ".") + f" {kur_metin}"
+genel_str = f"{genel_toplam:,.0f}".replace(",", ".") + f" {kur_metin}"
 
 st.write("---")
 col_a, col_b, col_c = st.columns(3)
@@ -84,7 +98,7 @@ st.write("---")
 # ==========================================
 # WORD OLUŞTURMA MOTORU
 # ==========================================
-def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
+def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m):
     doc = Document()
     
     if os.path.exists("logo.png"):
@@ -129,7 +143,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
         row_cells[1].text = str(row['İşlem'])
         row_cells[2].text = str(row['Birim'])
         fiyat = row['Fiyat']
-        row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
+        row_cells[3].text = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}" if fiyat > 0 else "-NIL-"
         
     doc.add_paragraph()
     
@@ -157,7 +171,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
 # ==========================================
 # EXCEL OLUŞTURMA MOTORU
 # ==========================================
-def excel_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
+def excel_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m):
     wb = Workbook()
     ws = wb.active
     ws.title = "Innomar Teklif"
@@ -212,7 +226,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
         ws.cell(row=row_idx, column=2).value = str(row['İşlem'])
         ws.cell(row=row_idx, column=3).value = str(row['Birim'])
         fiyat = row['Fiyat']
-        ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-"
+        ws.cell(row=row_idx, column=4).value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}" if fiyat > 0 else "-NIL-"
         
         for i in range(1, 5):
             ws.cell(row=row_idx, column=i).border = thin_border
@@ -255,7 +269,7 @@ def cevir_tr(metin):
     for k, v in tr_map.items(): metin = metin.replace(k, v)
     return metin
 
-def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
+def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar, kur_m):
     class PDF(FPDF):
         def header(self):
             if self.page_no() == 1:
@@ -311,7 +325,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
         pdf.cell(95, 8, cevir_tr(str(row['İşlem'])), 1)
         pdf.cell(45, 8, cevir_tr(str(row['Birim'])), 1)
         fiyat = row['Fiyat']
-        pdf.cell(35, 8, f"{fiyat:,.0f}".replace(",", ".") + " EURO" if fiyat > 0 else "-NIL-", 1)
+        pdf.cell(35, 8, f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}" if fiyat > 0 else "-NIL-", 1)
         pdf.ln()
         
     pdf.set_font('Arial', '', 9)
@@ -334,7 +348,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, h1, h2, h3, notlar):
     
     pdf.ln(10)
     
-    # Kullanıcının girdiği notları yazdır
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(0, 5, cevir_tr(notlar))
     
@@ -359,8 +372,8 @@ st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
 
 with btn_word:
-    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
+    st.download_button("📄 WORD İNDİR", data=word_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.docx", type="primary", use_container_width=True)
 with btn_excel:
-    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
+    st.download_button("📊 EXCEL İNDİR", data=excel_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.xlsx", type="primary", use_container_width=True)
 with btn_pdf:
-    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
+    st.download_button("📕 PDF İNDİR", data=pdf_olustur(duzenlenmis_df, ara_str, kdv_str, genel_str, tarih_metni, baslik_1, baslik_2, baslik_3, kullanici_notu, kur_metin), file_name=f"Teklif_{dosya_tarihi}.pdf", type="primary", use_container_width=True)
