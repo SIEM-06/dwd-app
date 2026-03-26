@@ -34,13 +34,13 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
         }
         st.session_state.not_alani = "* IMPORTANT NOTICE;\n- DURING MAINTENANCE IF DEFORMATION DETECTED ON WORKING SURFACE AND NEEDED TO RENEW COMPONENTS EACH PARTS WILL BE PRICED ADDITIONALLY.\n\n* REMARKS;\n- DELIVERY TIME FOR THE JOB IS 35 DAYS,\n- A DETAILED REPORT WILL BE SUBMITTED TO YOUR SIDE UPON COMPLETION OF THE WORK,\n- PAYMENT WILL BE ACCEPTED AS BELOW;\n    - %50 BEFORE WORK BEGINS,\n    - %50 UPON COMPLETION OF THE WORK."
     else: 
+        # KANKA BURASI SENİN BEJ TABLONA UYGUN YENİ SÜTUN YERLEŞİMİ
         data = {
-            'Marka': ['Örnek Marka', ''],
-            'Açıklama': ['Örnek Açıklama', ''],
-            'KDV': ['%20', '%20'],
+            'Açıklama': ['Örnek Hizmet', ''],
+            'Birim Fiyatı': ['1000', '500'],
             'Adet': ['1', '2'],
-            'Birim Fiyat': ['1000', '500'],
-            'Toplam Fiyat': [1000.0, 1000.0]
+            'KDV': ['%20', '%20'],
+            'Tutar': [1000.0, 1000.0]
         }
         st.session_state.not_alani = "Banka Hesap Bilgilerimiz:\nBanka Adı: \nIBAN: \nHesap Sahibi: "
     
@@ -122,7 +122,7 @@ st.write("---")
 st.subheader("📄 Belge Altı Notları")
 st.text_area("Bu alana yazdığınız metin belgenin altına eklenecektir:", key="not_alani", height=150)
 
-if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
+if st.button("🔄 Notları Sisteme Kaydet"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 st.write("---")
 
@@ -200,39 +200,21 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         p_title = doc.add_paragraph()
         p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}").bold = True
     else:
-        # Fatura Şablonu Native Çizimi (Word)
-        p_header = doc.add_paragraph()
-        r1 = p_header.add_run("INNOMARİN\n")
-        r1.bold = True
-        r1.font.color.rgb = RGBColor(0, 51, 153)
-        r1.font.size = Pt(24)
-        
-        r2 = p_header.add_run("SAILING INTO THE FUTURE\n")
-        r2.italic = True
-        r2.font.color.rgb = RGBColor(100, 100, 100)
-        r2.font.size = Pt(11)
-        
-        p_header.add_run("info@innomarin.com | www.innomarin.com\nKılavuz Sok. No: 16/6 Heybeliada / İSTANBUL")
-        
-        p_title = doc.add_paragraph()
-        p_title.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        r_title = p_title.add_run("Proforma Fatura")
-        r_title.bold = True
-        r_title.font.size = Pt(18)
-        
-        doc.add_paragraph("_" * 75)
-        
-        info_table = doc.add_table(rows=3, cols=2)
-        info_table.cell(0,0).text = "Fatura Kesilen:"
-        info_table.cell(0,0).paragraphs[0].runs[0].font.bold = True
-        info_table.cell(0,1).text = "Fatura Numarası: ........................"
-        
-        info_table.cell(1,0).text = "Müşteri Adı: .............................................................."
-        info_table.cell(1,1).text = f"Fatura Tarihi: {tarih}"
-        
-        info_table.cell(2,0).text = "Adres: ........................................................................"
-        info_table.cell(2,1).text = ""
-        doc.add_paragraph()
+        # WORD İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
+        if os.path.exists("ust_bar.png"):
+            p_logo = doc.add_paragraph()
+            p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_logo.add_run().add_picture("ust_bar.png", width=Cm(16))
+            doc.add_paragraph() # Tablodan önce boşluk
+        else:
+            doc.add_paragraph("FİRMA LOGOSU VE BİLGİLERİ\n(Lütfen 'ust_bar.png' dosyasını klasöre ekleyin)").runs[0].bold = True
+            doc.add_paragraph("_" * 75)
+            p_title = doc.add_paragraph()
+            p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p_title.add_run("PROFORMA FATURA").bold = True
+            p_date = doc.add_paragraph()
+            p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            p_date.add_run(f"TARİH: {tarih}").bold = True
     
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = 'Table Grid'
@@ -313,44 +295,22 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.set_text_color(0, 51, 153)
                     self.cell(0, 5, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
                     self.set_draw_color(0, 51, 153)
-                    self.set_line_width(0.3)
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
-                    # Fatura Şablonu Native Çizimi (PDF)
-                    self.set_y(15)
-                    self.set_font('Arial', 'B', 24)
-                    self.set_text_color(0, 51, 153)
-                    self.cell(100, 10, cevir_tr('INNOMARIN'), 0, 0, 'L')
-                    self.set_font('Arial', 'B', 18)
-                    self.set_text_color(0, 0, 0)
-                    self.cell(90, 10, cevir_tr('Proforma Fatura'), 0, 1, 'R')
-                    
-                    self.set_font('Arial', 'I', 10)
-                    self.set_text_color(100, 100, 100)
-                    self.cell(190, 5, cevir_tr('SAILING INTO THE FUTURE'), 0, 1, 'L')
-                    self.ln(2)
-                    
-                    self.set_font('Arial', '', 9)
-                    self.set_text_color(0, 0, 0)
-                    self.cell(190, 5, cevir_tr('info@innomarin.com | www.innomarin.com'), 0, 1, 'L')
-                    self.cell(190, 5, cevir_tr('Kilavuz Sok. No: 16/6 Heybeliada / ISTANBUL'), 0, 1, 'L')
-                    
-                    self.ln(3)
-                    self.set_draw_color(200, 200, 200)
-                    self.line(10, self.get_y(), 200, self.get_y())
-                    self.ln(5)
-                    
-                    self.set_font('Arial', 'B', 10)
-                    self.cell(100, 6, cevir_tr('Fatura Kesilen:'), 0, 0, 'L')
-                    self.set_font('Arial', '', 10)
-                    self.cell(90, 6, cevir_tr('Fatura Numarasi: ........................'), 0, 1, 'L')
-                    
-                    self.cell(100, 6, cevir_tr('Musteri Adi: ..............................................................'), 0, 0, 'L')
-                    self.cell(90, 6, cevir_tr(f'Fatura Tarihi: {tarih}'), 0, 1, 'L')
-                    
-                    self.cell(190, 6, cevir_tr('Adres: ........................................................................'), 0, 1, 'L')
-                    self.ln(8)
+                    # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
+                    if os.path.exists("ust_bar.png"):
+                        # A4 genişliği 210mm'dir. Sıfırdan sıfıra resmi tam oturturuz.
+                        self.image("ust_bar.png", x=0, y=0, w=210)
+                        self.set_y(65) # Logonun yüksekliğine göre tabloyu aşağı iter (gerekirse burayı artırabilirsin)
+                    else:
+                        self.set_font('Arial', 'B', 12)
+                        self.set_text_color(0, 0, 0)
+                        self.cell(0, 8, cevir_tr('FIRMA LOGOSU VE BILGILERI (ust_bar.png eksik)'), 0, 1, 'L')
+                        self.ln(10)
+                        self.set_font('Arial', 'B', 16)
+                        self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
+                        self.ln(5)
             else:
                 self.ln(15)
 
@@ -368,15 +328,24 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
     widths = get_pdf_widths(headers)
     
-    pdf.set_draw_color(0, 0, 0)
+    # --- KANKA BEJ RENKLİ TABLO BAŞLIĞI BURASI ---
+    pdf.set_draw_color(0, 0, 0) # Siyah ince sınır çizgileri
+    
+    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        pdf.set_fill_color(255, 255, 255) # Teklif için normal beyaz
+    else:
+        pdf.set_fill_color(245, 245, 235) # Fatura İçin Orijinal Bej (Krem) Rengi
+        
     pdf.set_font('Arial', 'B', 9)
     for idx, header in enumerate(headers):
-        pdf.cell(widths[idx], 8, cevir_tr(str(header)), 1, align=get_alignment(header))
+        # fill=True diyerek arka plan rengini boyuyoruz
+        pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, align='C', fill=True) 
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
+    pdf.set_fill_color(255, 255, 255) # Alt satırlar tekrar beyaz olacak
     for index, row in dataframe.iterrows():
-        pdf.cell(widths[0], 8, str(index + 1), 1, align='C')
+        pdf.cell(widths[0], 8, str(index + 1), 1, align='C', fill=True)
         for c_idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
             align = get_alignment(col_name)
@@ -393,7 +362,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             else:
                 yazilacak = cevir_tr(str(val))
                 
-            pdf.cell(widths[c_idx+1], 8, yazilacak, 1, align=align)
+            pdf.cell(widths[c_idx+1], 8, yazilacak, 1, align=align, fill=True)
         pdf.ln()
         
     w_empty = sum(widths[:-2]) if len(widths) > 2 else 110
@@ -421,7 +390,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.ln(10)
     pdf.set_font('Arial', '', 8)
     pdf.multi_cell(0, 5, cevir_tr(notlar))
-    pdf.ln(10)
     
     return pdf.output(dest='S').encode('latin-1')
 
@@ -454,48 +422,40 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # Fatura Şablonu Native Çizimi (Excel)
-        row_idx = 2
-        ws.cell(row=row_idx, column=1).value = "INNOMARİN"
-        ws.cell(row=row_idx, column=1).font = Font(color="003399", bold=True, size=20)
-        ws.cell(row=row_idx, column=5).value = "Proforma Fatura"
-        ws.cell(row=row_idx, column=5).font = Font(bold=True, size=16)
-        row_idx += 1
-        
-        ws.cell(row=row_idx, column=1).value = "SAILING INTO THE FUTURE"
-        ws.cell(row=row_idx, column=1).font = Font(italic=True, color="666666", size=10)
-        row_idx += 2
-        
-        ws.cell(row=row_idx, column=1).value = "info@innomarin.com | www.innomarin.com"
-        row_idx += 1
-        ws.cell(row=row_idx, column=1).value = "Kılavuz Sok. No: 16/6 Heybeliada / İSTANBUL"
-        row_idx += 2
-        
-        ws.cell(row=row_idx, column=1).value = "Fatura Kesilen:"
-        ws.cell(row=row_idx, column=1).font = Font(bold=True)
-        ws.cell(row=row_idx, column=5).value = "Fatura Numarası: ........................"
-        row_idx += 1
-        
-        ws.cell(row=row_idx, column=1).value = "Müşteri Adı: .............................................................."
-        ws.cell(row=row_idx, column=5).value = f"Fatura Tarihi: {tarih}"
-        row_idx += 1
-        
-        ws.cell(row=row_idx, column=1).value = "Adres: ........................................................................"
-        row_idx += 3
+        # EXCEL İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
+        if os.path.exists("ust_bar.png"):
+            img = xlImage("ust_bar.png")
+            ws.add_image(img, 'A1')
+            row_idx = 14 # Logodan sonra tabloya kadar inmesi gereken satır payı
+        else:
+            ws[f'B{row_idx}'] = "FİRMA LOGOSU VE BİLGİLERİ (ust_bar.png ekleyin)"
+            ws[f'B{row_idx}'].font = Font(bold=True, size=14)
+            row_idx += 3
+            ws[f'C{row_idx}'] = "PROFORMA FATURA"
+            ws[f'C{row_idx}'].font = Font(bold=True, size=16)
+            ws[f'C{row_idx}'].alignment = Alignment(horizontal="center")
+            row_idx += 2
+            ws.cell(row=row_idx, column=len(dataframe.columns)+1).value = f"TARIH: {tarih}"
+            ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
+            row_idx += 2
     
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
-    
     set_excel_col_widths(ws, headers)
     
     thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-    gray_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
+    # --- KANKA BEJ RENKLİ TABLO BAŞLIĞI (EXCEL İÇİN) ---
+    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") # Teklif için standart gri
+    else:
+        bg_fill = PatternFill(start_color="F5F5EB", end_color="F5F5EB", fill_type="solid") # Fatura için krem/bej rengi
+        
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
         cell.value = str(header)
         cell.font = Font(bold=True)
         cell.border = thin_border
-        cell.fill = gray_fill
+        cell.fill = bg_fill
         align = get_alignment(header)
         if align == 'R': cell.alignment = Alignment(horizontal="right")
         elif align == 'C': cell.alignment = Alignment(horizontal="center")
