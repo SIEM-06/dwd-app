@@ -74,7 +74,7 @@ if len(yeni_sutunlar) < 2:
     yeni_sutunlar = st.session_state.veri_df.columns.tolist()
 
 if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
-    eski_df = st.session_state.veri_df.copy()
+    eski_df = st.session_state.veri_df
     yeni_df = pd.DataFrame(columns=yeni_sutunlar)
     for col in yeni_sutunlar:
         if col in eski_df.columns:
@@ -82,23 +82,14 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         else:
             yeni_df[col] = "" 
             
+    son_sutun_adi = yeni_sutunlar[-1]
+    yeni_df[son_sutun_adi] = pd.to_numeric(yeni_df[son_sutun_adi], errors='coerce').fillna(0.0)
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-# DTYPE KORUMASI VE TEMİZLİK (Hata Çözümü Burası)
-df = st.session_state.veri_df.copy()
+df = st.session_state.veri_df
 son_sutun = df.columns[-1] 
-
-for col in df.columns:
-    if col == son_sutun:
-        # Son sütun mutlaka sayı olmalı
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
-    else:
-        # Geri kalanlar kesinlikle metin olmalı ve boş "nan" yazıları silinmeli
-        df[col] = df[col].astype(str)
-        df[col] = df[col].apply(lambda x: "" if str(x).lower() in ['nan', 'none', '<na>'] else x)
-
-st.session_state.veri_df = df
+df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
 
 col_config = {}
 for col in df.columns[:-1]:
@@ -107,16 +98,7 @@ col_config[son_sutun] = st.column_config.NumberColumn(son_sutun, format=f"%d {se
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-# Eşsiz Key ile tablonun sütun değiştiğinde çökmesini engelliyoruz
-tablo_key = f"editor_{secili_sablon}_{''.join(df.columns)}"
-
-duzenlenmis_df = st.data_editor(
-    df, 
-    column_config=col_config, 
-    num_rows="dynamic", 
-    use_container_width=True,
-    key=tablo_key
-)
+duzenlenmis_df = st.data_editor(df, column_config=col_config, num_rows="dynamic", use_container_width=True)
 
 # --- HESAPLAMALAR ---
 fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
@@ -237,8 +219,15 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             val = row[col_name]
             align = get_alignment(col_name)
             if col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(val, errors='coerce')
-                row_cells[c_idx+1].text = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                # ZIRHLI HATA KORUMASI BURADA
+                try:
+                    fiyat = float(val)
+                    if fiyat <= 0:
+                        row_cells[c_idx+1].text = "-NIL-"
+                    else:
+                        row_cells[c_idx+1].text = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except (ValueError, TypeError):
+                    row_cells[c_idx+1].text = "-NIL-"
             else:
                 row_cells[c_idx+1].text = str(val)
                 
@@ -340,8 +329,15 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             val = row[col_name]
             align = get_alignment(col_name)
             if col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(val, errors='coerce')
-                fiyat_str = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                # ZIRHLI HATA KORUMASI BURADA
+                try:
+                    fiyat = float(val)
+                    if fiyat <= 0:
+                        fiyat_str = "-NIL-"
+                    else:
+                        fiyat_str = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except (ValueError, TypeError):
+                    fiyat_str = "-NIL-"
                 pdf.cell(widths[c_idx+1], 8, fiyat_str, 1, align=align)
             else:
                 pdf.cell(widths[c_idx+1], 8, cevir_tr(str(val)), 1, align=align)
@@ -457,8 +453,15 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             align = get_alignment(col_name)
             
             if col_name == dataframe.columns[-1]: 
-                fiyat = pd.to_numeric(val, errors='coerce')
-                cell.value = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                # ZIRHLI HATA KORUMASI BURADA
+                try:
+                    fiyat = float(val)
+                    if fiyat <= 0:
+                        cell.value = "-NIL-"
+                    else:
+                        cell.value = f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                except (ValueError, TypeError):
+                    cell.value = "-NIL-"
             else:
                 cell.value = str(val)
                 
