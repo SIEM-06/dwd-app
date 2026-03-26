@@ -295,15 +295,16 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
                     self.set_text_color(0, 51, 153)
                     self.cell(0, 5, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
                     self.set_draw_color(0, 51, 153)
+                    self.set_line_width(0.3)
                     self.line(10, self.get_y()+2, 200, self.get_y()+2)
                     self.ln(10)
                 else:
-                    # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR
+                    # PDF İÇİN ÜST BAR FOTOĞRAFI EKLENİYOR (A4 Genişliğine Tam Yayılır)
                     if os.path.exists("ust_bar.png"):
-                        # Resmi biraz daha dar ve ortalı koyduk (Çok büyük olmaması için w=180, x=15)
-                        self.image("ust_bar.png", x=15, y=5, w=180)
-                        # Tablonun resmin üstüne binmemesi için Y eksenini 90'a çektik.
-                        self.set_y(90) 
+                        # A4 kağıdı 210mm genişliğindedir, resmi tam oturtuyoruz.
+                        self.image("ust_bar.png", x=0, y=0, w=210)
+                        # Tablonun resmin üstüne binmemesi için Y eksenini biraz daha artırdık.
+                        self.set_y(80) 
                     else:
                         self.set_font('Arial', 'B', 12)
                         self.set_text_color(0, 0, 0)
@@ -422,11 +423,22 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
         row_idx += 2
     else:
-        # EXCEL İÇİN AYRI ÜST BAR FOTOĞRAFI EKLENİYOR
-        excel_img = "excel_ust_bar.png" if os.path.exists("excel_ust_bar.png") else "ust_bar.png"
-        
-        if os.path.exists(excel_img):
-            img = xlImage(excel_img)
+        # EXCEL İÇİN AYRI ÜST BAR FOTOĞRAFI EKLENİYOR (İlk kontrol excel_ust_bar.png)
+        resim_yolu = None
+        if os.path.exists("excel_ust_bar.png"):
+            resim_yolu = "excel_ust_bar.png"
+        elif os.path.exists("ust_bar.png"):
+            resim_yolu = "ust_bar.png"
+            
+        if resim_yolu:
+            img = xlImage(resim_yolu)
+            
+            # EXCEL İÇİN OTOMATİK BOYUTLANDIRMA (Çok büyük olmasını engeller)
+            if img.width > 750:
+                oran = 750 / img.width
+                img.width = 750
+                img.height = int(img.height * oran)
+                
             ws.add_image(img, 'A1')
             row_idx = 16 # Resmin boyutuna göre tabloyu daha da aşağıya aldık
         else:
@@ -450,7 +462,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         bg_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid") 
     else:
-        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") 
+        bg_fill = PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid") # Krem/Bej rengi
         
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
