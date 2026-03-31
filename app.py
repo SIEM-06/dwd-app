@@ -118,15 +118,8 @@ def kolonu_bul(columns, adaylar):
     return None
 
 def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
-    """
-    Yeni satır eklendiğinde NaN (boş) değerleri hazır hale getirir.
-    - KDV = %20
-    - Sayısal Alanlar = 0
-    - Metinler = Boş string
-    """
     df_calc = dataframe.copy()
 
-    # KANKA: Tüm NaN (boş) satırları ilgili formata göre hazır hale getiriyoruz
     for col in df_calc.columns:
         low = str(col).strip().lower()
         if low in {"adet", "qty", "quantity", "miktar"}:
@@ -167,9 +160,9 @@ secili_sablon = st.sidebar.radio(
 )
 
 gizle_checkbox = st.sidebar.checkbox(
-    "🔒 Birim Fiyatını Çıktılarda Gizle (Sansürle)",
+    "🔒 Birim Fiyat Sütununu Çıktılarda Gizle",
     value=False,
-    help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu '***' olarak görünür."
+    help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu tamamen kaldırılır. (Sitede görünmeye devam eder)."
 )
 
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
@@ -265,10 +258,9 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.rerun()
 
 # =========================================================
-# TABLO EDİTÖRÜ (SIRA NUMARALARI 1'DEN BAŞLAR)
+# TABLO EDİTÖRÜ 
 # =========================================================
 df_ui = st.session_state.veri_df.copy()
-# KANKA: Ekranda 0 yerine 1'den başlasın diye indexi 1 kaydırıyoruz
 df_ui.index = df_ui.index + 1 
 
 col_config = {}
@@ -289,11 +281,10 @@ duzenlenmis_df_ui = st.data_editor(
     column_config=col_config,
     num_rows="dynamic",
     use_container_width=True,
-    hide_index=False, # İndex numaraları (Sıra) sitede gözükecek
+    hide_index=False, 
     key="veri_editoru"
 )
 
-# İşlem yapmak için indexi tekrar 0'dan başlayacak standart formata çeviriyoruz
 duzenlenmis_df = duzenlenmis_df_ui.copy()
 duzenlenmis_df.reset_index(drop=True, inplace=True)
 
@@ -303,11 +294,9 @@ duzenlenmis_df.reset_index(drop=True, inplace=True)
 hesaplanmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
 
 guncelle = False
-# Eğer yeni satır eklendiyse (veya silindiyse)
 if len(duzenlenmis_df) != len(st.session_state.veri_df):
     guncelle = True
 else:
-    # Eğer değerlerde (Tutar hesabı vs.) bir farklılık olduysa
     for col in duzenlenmis_df.columns:
         low = str(col).lower().strip()
         if low == "kdv":
@@ -330,7 +319,7 @@ if guncelle:
 duzenlenmis_df = hesaplanmis_df
 
 # =========================================================
-# HESAPLAMALAR (HER SATIR İÇİN AYRI KDV)
+# HESAPLAMALAR
 # =========================================================
 toplam_sutunu = toplam_sutununu_bul(duzenlenmis_df, secili_sablon)
 fiyatlar = pd.to_numeric(duzenlenmis_df[toplam_sutunu], errors='coerce').fillna(0)
@@ -386,8 +375,13 @@ st.write("---")
 # WORD OLUŞTUR
 # =========================================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
-    birim_sutun = get_birim_col(dataframe.columns)
-    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
+    df_out = dataframe.copy()
+    if gizle_aktif:
+        birim_sutun = get_birim_col(df_out.columns)
+        if birim_sutun:
+            df_out = df_out.drop(columns=[birim_sutun])
+            
+    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(df_out.columns)
 
     if os.path.exists(WORD_TEMPLATE):
         doc = Document(WORD_TEMPLATE)
@@ -428,20 +422,17 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         elif align == 'C':
             cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    for index, row in dataframe.iterrows():
+    for index, row in df_out.iterrows():
         row_cells = table.add_row().cells
         row_cells[0].text = str(index + 1)
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        for c_idx, col_name in enumerate(dataframe.columns):
+        for c_idx, col_name in enumerate(df_out.columns):
             val = row[col_name]
             align = get_alignment(col_name)
             low = str(col_name).strip().lower()
 
-            if gizle_aktif and col_name == birim_sutun:
-                text_val = "***"
-                align = 'C'
-            elif low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
+            if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 text_val = format_money_value(val, kur_m)
             else:
                 text_val = str(val)
@@ -497,7 +488,11 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 # PDF OLUŞTUR
 # =========================================================
 def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
-    birim_sutun = get_birim_col(dataframe.columns)
+    df_out = dataframe.copy()
+    if gizle_aktif:
+        birim_sutun = get_birim_col(df_out.columns)
+        if birim_sutun:
+            df_out = df_out.drop(columns=[birim_sutun])
 
     class PDF(FPDF):
         def header(self):
@@ -507,7 +502,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     pdf = PDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=20)
+    # KANKA: İŞTE O TAŞMA SORUNUNU ÇÖZEN SİHİRLİ DOKUNUŞ (Margin 20 -> 45 yapıldı)
+    pdf.set_auto_page_break(auto=True, margin=45)
 
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
@@ -523,7 +519,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     pdf.ln(4)
 
-    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
+    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(df_out.columns)
     widths = get_pdf_widths(headers)
 
     pdf.set_draw_color(0, 0, 0)
@@ -536,18 +532,15 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.ln()
 
     pdf.set_font('Arial', '', 8)
-    for index, row in dataframe.iterrows():
+    for index, row in df_out.iterrows():
         pdf.cell(widths[0], 8, str(index + 1), 1, 0, 'C', fill=True)
 
-        for c_idx, col_name in enumerate(dataframe.columns):
+        for c_idx, col_name in enumerate(df_out.columns):
             val = row[col_name]
             align = get_alignment(col_name)
             low = str(col_name).strip().lower()
 
-            if gizle_aktif and col_name == birim_sutun:
-                yazilacak = "***"
-                align = 'C'
-            elif low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
+            if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 yazilacak = format_money_value(val, kur_m)
             else:
                 yazilacak = cevir_tr(str(val))
@@ -599,13 +592,18 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 # EXCEL OLUŞTUR
 # =========================================================
 def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
+    df_out = dataframe.copy()
+    if gizle_aktif:
+        birim_sutun = get_birim_col(df_out.columns)
+        if birim_sutun:
+            df_out = df_out.drop(columns=[birim_sutun])
+            
     wb = Workbook()
     ws = wb.active
     ws.title = "Belge"
     ws.sheet_view.showGridLines = True
 
     row_idx = 1
-    birim_sutun = get_birim_col(dataframe.columns)
 
     if os.path.exists(ANTET_DOSYASI):
         img = xlImage(ANTET_DOSYASI)
@@ -623,15 +621,15 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.sheet_view.showGridLines = False
         ws[f'B{row_idx}'] = "• MY ADA DRY DOCK SERVICES QUOTATION;"
         ws[f'B{row_idx}'].font = Font(bold=True, size=12)
-        ws.cell(row=row_idx, column=len(dataframe.columns) + 2).value = f"DATE: {tarih}"
-        ws.cell(row=row_idx, column=len(dataframe.columns) + 2).font = Font(bold=True)
+        ws.cell(row=row_idx, column=len(df_out.columns) + 2).value = f"DATE: {tarih}"
+        ws.cell(row=row_idx, column=len(df_out.columns) + 2).font = Font(bold=True)
         row_idx += 2
     else:
         ws[f'C{row_idx}'] = "PROFORMA FATURA"
         ws[f'C{row_idx}'].font = Font(bold=True, size=16)
         ws[f'C{row_idx}'].alignment = Alignment(horizontal="center")
 
-        tarih_sutun = len(dataframe.columns) - 1
+        tarih_sutun = len(df_out.columns) - 1
         if tarih_sutun < 4:
             tarih_sutun = 4
 
@@ -655,7 +653,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
         row_idx += 2
 
-    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
+    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(df_out.columns)
     set_excel_col_widths(ws, headers)
 
     thin_border = Border(
@@ -687,22 +685,19 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             cell.alignment = Alignment(horizontal="left")
     row_idx += 1
 
-    for index, row in dataframe.iterrows():
+    for index, row in df_out.iterrows():
         cell = ws.cell(row=row_idx, column=1)
         cell.value = index + 1
         cell.border = thin_border
         cell.alignment = Alignment(horizontal="center")
 
-        for c_idx, col_name in enumerate(dataframe.columns):
+        for c_idx, col_name in enumerate(df_out.columns):
             val = row[col_name]
             cell = ws.cell(row=row_idx, column=c_idx + 2)
             align = get_alignment(col_name)
             low = str(col_name).strip().lower()
 
-            if gizle_aktif and col_name == birim_sutun:
-                cell.value = "***"
-                cell.alignment = Alignment(horizontal="center")
-            elif low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
+            if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 cell.value = format_money_value(val, kur_m)
                 if align == 'R':
                     cell.alignment = Alignment(horizontal="right")
@@ -723,8 +718,8 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
         row_idx += 1
 
-    tot_col = len(dataframe.columns)
-    val_col = len(dataframe.columns) + 1
+    tot_col = len(headers) - 1
+    val_col = len(headers)
 
     ws.cell(row=row_idx, column=tot_col).value = "Ara Toplam" if sablon_tipi != "⚓ INNOMAR Özel Teklif" else "TOTAL PRICE"
     ws.cell(row=row_idx, column=tot_col).border = thin_border
