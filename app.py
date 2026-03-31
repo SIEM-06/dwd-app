@@ -104,6 +104,12 @@ def format_money_value(val, kur_m):
     except Exception:
         return "-NIL-"
 
+def guvenli_table_style(table, style_name="Table Grid"):
+    try:
+        table.style = style_name
+    except Exception:
+        pass
+
 # =========================================================
 # PLATFORM ŞABLON SEÇİCİ
 # =========================================================
@@ -272,7 +278,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     birim_sutun = get_birim_col(dataframe.columns)
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
 
-    # Template varsa onu aç
     if os.path.exists(WORD_TEMPLATE):
         doc = Document(WORD_TEMPLATE)
     else:
@@ -280,10 +285,8 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         p_warn = doc.add_paragraph()
         p_warn.add_run("UYARI: word_template.docx bulunamadı.").bold = True
 
-    # İçeriğe biraz boşluk
     doc.add_paragraph()
 
-    # Başlık
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         p_title = doc.add_paragraph()
         p_title.add_run("•   MY ADA DRY DOCK SERVICES QUOTATION;").bold = True
@@ -292,14 +295,12 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_title.add_run("PROFORMA FATURA").bold = True
 
-    # Tarih
     p_date = doc.add_paragraph()
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     p_date.add_run(f"TARİH / DATE: {tarih}").bold = True
 
-    # Tablo
     table = doc.add_table(rows=1, cols=len(headers))
-    table.style = 'Table Grid'
+    guvenli_table_style(table, "Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     for idx, header in enumerate(headers):
@@ -346,9 +347,8 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
     doc.add_paragraph()
 
-    # Toplam tablosu
     tot_table = doc.add_table(rows=3, cols=2)
-    tot_table.style = 'Table Grid'
+    guvenli_table_style(tot_table, "Table Grid")
     tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
 
     labels = (
@@ -373,7 +373,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
     doc.add_paragraph()
 
-    # Notlar
     for satir in str(notlar).split('\n'):
         p = doc.add_paragraph(satir)
         if p.runs:
@@ -393,7 +392,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
-
             self.set_y(55)
 
     pdf = PDF()
@@ -446,7 +444,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
         pdf.ln()
 
-    # Toplam kutuları
     w_val = widths[-1]
 
     label_w = 0
@@ -498,7 +495,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     row_idx = 1
     birim_sutun = get_birim_col(dataframe.columns)
 
-    # Antet görseli
     if os.path.exists(ANTET_DOSYASI):
         img = xlImage(ANTET_DOSYASI)
         oran = 760 / img.width
@@ -563,7 +559,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         else PatternFill(start_color="EBE4D5", end_color="EBE4D5", fill_type="solid")
     )
 
-    # Header
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=row_idx, column=col_num)
         cell.value = str(header)
@@ -580,7 +575,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             cell.alignment = Alignment(horizontal="left")
     row_idx += 1
 
-    # Data rows
     for index, row in dataframe.iterrows():
         cell = ws.cell(row=row_idx, column=1)
         cell.value = index + 1
@@ -616,7 +610,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
         row_idx += 1
 
-    # Toplamlar
     tot_col = len(dataframe.columns)
     val_col = len(dataframe.columns) + 1
 
@@ -644,7 +637,6 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     ws.cell(row=row_idx, column=val_col).alignment = Alignment(horizontal="right")
     row_idx += 2
 
-    # Notlar
     for satir in str(notlar).split('\n'):
         ws[f'A{row_idx}'] = satir
         row_idx += 1
