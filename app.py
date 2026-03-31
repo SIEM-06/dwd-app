@@ -366,7 +366,7 @@ st.text_area(
     placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz..."
 )
 
-if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
+if st.button("🔄Notları Kaydet"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
 st.write("---")
