@@ -119,30 +119,34 @@ def kolonu_bul(columns, adaylar):
 
 def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
     """
-    Standart Proforma Fatura için:
-    - KDV sütunundaki boş satırlar %20 yapılır, doluysa bozulmaz
-    - Adet * Birim Fiyatı = Tutar otomatik hesaplanır
+    Yeni satır eklendiğinde NaN (boş) değerleri hazır hale getirir.
+    - KDV = %20
+    - Sayısal Alanlar = 0
+    - Metinler = Boş string
     """
-    if sablon_tipi != "📄 Standart Proforma Fatura":
-        return dataframe
-
     df_calc = dataframe.copy()
-    kdv_col = kolonu_bul(df_calc.columns, {"kdv"})
-    adet_col = kolonu_bul(df_calc.columns, {"adet", "qty", "quantity", "miktar"})
-    birim_col = kolonu_bul(df_calc.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
-    tutar_col = kolonu_bul(df_calc.columns, {"tutar", "total", "amount"})
 
-    if kdv_col is not None:
-        def kdv_fill(x):
-            if pd.isna(x) or str(x).strip() == "" or str(x).strip().lower() == "nan":
-                return "%20"
-            return str(x)
-        df_calc[kdv_col] = df_calc[kdv_col].apply(kdv_fill)
+    # KANKA: Tüm NaN (boş) satırları ilgili formata göre hazır hale getiriyoruz
+    for col in df_calc.columns:
+        low = str(col).strip().lower()
+        if low in {"adet", "qty", "quantity", "miktar"}:
+            df_calc[col] = pd.to_numeric(df_calc[col], errors="coerce").fillna(0)
+        elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "tutar", "total", "amount"}:
+            df_calc[col] = pd.to_numeric(df_calc[col], errors="coerce").fillna(0.0)
+        elif low == "kdv" and sablon_tipi == "📄 Standart Proforma Fatura":
+            df_calc[col] = df_calc[col].apply(lambda x: "%20" if pd.isna(x) or str(x).strip() == "" or str(x).strip().lower() == "nan" else x)
+        else:
+            df_calc[col] = df_calc[col].fillna("")
 
-    if adet_col is not None and birim_col is not None and tutar_col is not None:
-        adet_seri = pd.to_numeric(df_calc[adet_col], errors="coerce").fillna(0)
-        birim_seri = pd.to_numeric(df_calc[birim_col], errors="coerce").fillna(0)
-        df_calc[tutar_col] = (adet_seri * birim_seri).astype(float)
+    if sablon_tipi == "📄 Standart Proforma Fatura":
+        adet_col = kolonu_bul(df_calc.columns, {"adet", "qty", "quantity", "miktar"})
+        birim_col = kolonu_bul(df_calc.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
+        tutar_col = kolonu_bul(df_calc.columns, {"tutar", "total", "amount"})
+
+        if adet_col is not None and birim_col is not None and tutar_col is not None:
+            adet_seri = pd.to_numeric(df_calc[adet_col], errors="coerce").fillna(0)
+            birim_seri = pd.to_numeric(df_calc[birim_col], errors="coerce").fillna(0.0)
+            df_calc[tutar_col] = (adet_seri * birim_seri).astype(float)
 
     return df_calc
 
@@ -251,80 +255,69 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         else:
             yeni_df[col] = ""
 
-    if secili_sablon == "📄 Standart Proforma Fatura":
-        kdv_col = kolonu_bul(yeni_df.columns, {"kdv"})
-        if kdv_col is not None:
-            # Dinamik sütun yönetiminde yeni eklenen satırlar için sadece boş olanları doldur
-            yeni_df[kdv_col] = yeni_df[kdv_col].apply(lambda x: "%20" if pd.isna(x) or str(x).strip() == "" else x)
-
     son_sutun_adi = yeni_sutunlar[-1]
     yeni_df[son_sutun_adi] = pd.to_numeric(
         yeni_df[son_sutun_adi],
         errors='coerce'
     ).fillna(0.0)
 
-    st.session_state.veri_df = yeni_df
+    st.session_state.veri_df = otomatik_hesaplari_uygula(yeni_df, secili_sablon)
     st.rerun()
 
-df = st.session_state.veri_df
-
-if secili_sablon == "📄 Standart Proforma Fatura":
-    adet_col = kolonu_bul(df.columns, {"adet", "qty", "quantity", "miktar"})
-    birim_col = kolonu_bul(df.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
-    tutar_col = kolonu_bul(df.columns, {"tutar", "total", "amount"})
-
-    if adet_col is not None:
-        df[adet_col] = pd.to_numeric(df[adet_col], errors='coerce').fillna(0)
-    if birim_col is not None:
-        df[birim_col] = pd.to_numeric(df[birim_col], errors='coerce').fillna(0.0)
-    if tutar_col is not None:
-        df[tutar_col] = pd.to_numeric(df[tutar_col], errors='coerce').fillna(0.0)
-else:
-    son_sutun = df.columns[-1]
-    df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
+# =========================================================
+# TABLO EDİTÖRÜ (SIRA NUMARALARI 1'DEN BAŞLAR)
+# =========================================================
+df_ui = st.session_state.veri_df.copy()
+# KANKA: Ekranda 0 yerine 1'den başlasın diye indexi 1 kaydırıyoruz
+df_ui.index = df_ui.index + 1 
 
 col_config = {}
-for col in df.columns:
+for col in df_ui.columns:
     low = str(col).strip().lower()
 
     if low in {"adet", "qty", "quantity", "miktar"}:
         col_config[col] = st.column_config.NumberColumn(col, format="%d")
     elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "price", "tutar", "total", "amount"}:
         col_config[col] = st.column_config.NumberColumn(col, format=f"%d {sembol}")
-    elif low == "kdv" and secili_sablon == "📄 Standart Proforma Fatura":
-        col_config[col] = st.column_config.TextColumn(col) # KDV değiştirilebilir
     else:
         col_config[col] = st.column_config.TextColumn(col)
 
-st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
+st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için '+' butonunu kullanın.")
 
-# TABLO EDİTÖRÜ (KANKA: hide_index=False diyerek sıra numarasını geri getirdik!)
-duzenlenmis_df = st.data_editor(
-    df,
+duzenlenmis_df_ui = st.data_editor(
+    df_ui,
     column_config=col_config,
     num_rows="dynamic",
     use_container_width=True,
-    hide_index=False, 
+    hide_index=False, # İndex numaraları (Sıra) sitede gözükecek
     key="veri_editoru"
 )
 
-# KANKA: İŞTE O SİTEDE ANINDA GÜNCELLEMEYİ SAĞLAYAN SİHİRLİ ALGORİTMA
+# İşlem yapmak için indexi tekrar 0'dan başlayacak standart formata çeviriyoruz
+duzenlenmis_df = duzenlenmis_df_ui.copy()
+duzenlenmis_df.reset_index(drop=True, inplace=True)
+
+# =========================================================
+# OTOMATİK YENİLEME VE HAZIR SATIR SİSTEMİ
+# =========================================================
 hesaplanmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
 
 guncelle = False
-if len(duzenlenmis_df) != len(hesaplanmis_df):
+# Eğer yeni satır eklendiyse (veya silindiyse)
+if len(duzenlenmis_df) != len(st.session_state.veri_df):
     guncelle = True
 else:
+    # Eğer değerlerde (Tutar hesabı vs.) bir farklılık olduysa
     for col in duzenlenmis_df.columns:
         low = str(col).lower().strip()
         if low == "kdv":
-            s1 = duzenlenmis_df[col].astype(str).fillna("").str.strip()
+            s1 = st.session_state.veri_df[col].astype(str).fillna("").str.strip()
             s2 = hesaplanmis_df[col].astype(str).fillna("").str.strip()
             if not s1.equals(s2):
                 guncelle = True
                 break
         elif low in ["tutar", "total", "amount"]:
-            s1 = pd.to_numeric(duzenlenmis_df[col], errors='coerce').fillna(0).round(2)
+            s1 = pd.to_numeric(st.session_state.veri_df[col], errors='coerce').fillna(0).round(2)
             s2 = pd.to_numeric(hesaplanmis_df[col], errors='coerce').fillna(0).round(2)
             if not s1.equals(s2):
                 guncelle = True
