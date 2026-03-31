@@ -134,7 +134,6 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
 
     if kdv_col is not None:
         def kdv_fill(x):
-            # Boş, NaN veya yazısız hücreleri %20 ile doldur
             if pd.isna(x) or str(x).strip() == "" or str(x).strip().lower() == "nan":
                 return "%20"
             return str(x)
@@ -299,19 +298,39 @@ for col in df.columns:
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
-# TABLO EDİTÖRÜ
+# TABLO EDİTÖRÜ (KANKA: hide_index=False diyerek sıra numarasını geri getirdik!)
 duzenlenmis_df = st.data_editor(
     df,
     column_config=col_config,
     num_rows="dynamic",
     use_container_width=True,
+    hide_index=False, 
     key="veri_editoru"
 )
 
-# KANKA: İŞTE O SİTEDE ANINDA GÜNCELLEMEYİ SAĞLAYAN SİHİRLİ KISIM!
+# KANKA: İŞTE O SİTEDE ANINDA GÜNCELLEMEYİ SAĞLAYAN SİHİRLİ ALGORİTMA
 hesaplanmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
 
-if not duzenlenmis_df.equals(hesaplanmis_df):
+guncelle = False
+if len(duzenlenmis_df) != len(hesaplanmis_df):
+    guncelle = True
+else:
+    for col in duzenlenmis_df.columns:
+        low = str(col).lower().strip()
+        if low == "kdv":
+            s1 = duzenlenmis_df[col].astype(str).fillna("").str.strip()
+            s2 = hesaplanmis_df[col].astype(str).fillna("").str.strip()
+            if not s1.equals(s2):
+                guncelle = True
+                break
+        elif low in ["tutar", "total", "amount"]:
+            s1 = pd.to_numeric(duzenlenmis_df[col], errors='coerce').fillna(0).round(2)
+            s2 = pd.to_numeric(hesaplanmis_df[col], errors='coerce').fillna(0).round(2)
+            if not s1.equals(s2):
+                guncelle = True
+                break
+
+if guncelle:
     st.session_state.veri_df = hesaplanmis_df
     st.rerun()
 
@@ -329,7 +348,6 @@ if secili_sablon == "📄 Standart Proforma Fatura":
     kdv_col = kolonu_bul(duzenlenmis_df.columns, {"kdv"})
     if kdv_col is not None:
         def kdv_parse(val):
-            # Boşluktan veya NaN'dan kaynaklı 0 hesaplamasını engelleyen kurtarıcı
             try:
                 if pd.isna(val): return 0.20
                 v = str(val).lower().replace('%', '').replace(',', '.').strip()
