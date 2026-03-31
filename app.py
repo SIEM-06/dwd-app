@@ -126,21 +126,26 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
     if sablon_tipi != "📄 Standart Proforma Fatura":
         return dataframe
 
-    kdv_col = kolonu_bul(dataframe.columns, {"kdv"})
-    adet_col = kolonu_bul(dataframe.columns, {"adet", "qty", "quantity", "miktar"})
-    birim_col = kolonu_bul(dataframe.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
-    tutar_col = kolonu_bul(dataframe.columns, {"tutar", "total", "amount"})
+    df_calc = dataframe.copy()
+    kdv_col = kolonu_bul(df_calc.columns, {"kdv"})
+    adet_col = kolonu_bul(df_calc.columns, {"adet", "qty", "quantity", "miktar"})
+    birim_col = kolonu_bul(df_calc.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
+    tutar_col = kolonu_bul(df_calc.columns, {"tutar", "total", "amount"})
 
     if kdv_col is not None:
-        # Sadece boş (NaN veya boş string) olan hücreleri %20 ile doldur, user verisini ezme
-        dataframe[kdv_col] = dataframe[kdv_col].apply(lambda x: "%20" if pd.isna(x) or str(x).strip() == "" else x)
+        def kdv_fill(x):
+            # Boş, NaN veya yazısız hücreleri %20 ile doldur
+            if pd.isna(x) or str(x).strip() == "" or str(x).strip().lower() == "nan":
+                return "%20"
+            return str(x)
+        df_calc[kdv_col] = df_calc[kdv_col].apply(kdv_fill)
 
     if adet_col is not None and birim_col is not None and tutar_col is not None:
-        adet_seri = pd.to_numeric(dataframe[adet_col], errors="coerce").fillna(0)
-        birim_seri = pd.to_numeric(dataframe[birim_col], errors="coerce").fillna(0)
-        dataframe[tutar_col] = adet_seri * birim_seri
+        adet_seri = pd.to_numeric(df_calc[adet_col], errors="coerce").fillna(0)
+        birim_seri = pd.to_numeric(df_calc[birim_col], errors="coerce").fillna(0)
+        df_calc[tutar_col] = (adet_seri * birim_seri).astype(float)
 
-    return dataframe
+    return df_calc
 
 def toplam_sutununu_bul(dataframe, sablon_tipi):
     if sablon_tipi == "📄 Standart Proforma Fatura":
@@ -288,12 +293,13 @@ for col in df.columns:
     elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "price", "tutar", "total", "amount"}:
         col_config[col] = st.column_config.NumberColumn(col, format=f"%d {sembol}")
     elif low == "kdv" and secili_sablon == "📄 Standart Proforma Fatura":
-        col_config[col] = st.column_config.TextColumn(col) # Artık KDV düzenlenebilir!
+        col_config[col] = st.column_config.TextColumn(col) # KDV değiştirilebilir
     else:
         col_config[col] = st.column_config.TextColumn(col)
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
+# TABLO EDİTÖRÜ
 duzenlenmis_df = st.data_editor(
     df,
     column_config=col_config,
@@ -302,10 +308,17 @@ duzenlenmis_df = st.data_editor(
     key="veri_editoru"
 )
 
-duzenlenmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
+# KANKA: İŞTE O SİTEDE ANINDA GÜNCELLEMEYİ SAĞLAYAN SİHİRLİ KISIM!
+hesaplanmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
+
+if not duzenlenmis_df.equals(hesaplanmis_df):
+    st.session_state.veri_df = hesaplanmis_df
+    st.rerun()
+
+duzenlenmis_df = hesaplanmis_df
 
 # =========================================================
-# HESAPLAMALAR (HER SATIR İÇİN AYRI KDV HESABI EKLENDİ)
+# HESAPLAMALAR (HER SATIR İÇİN AYRI KDV)
 # =========================================================
 toplam_sutunu = toplam_sutununu_bul(duzenlenmis_df, secili_sablon)
 fiyatlar = pd.to_numeric(duzenlenmis_df[toplam_sutunu], errors='coerce').fillna(0)
@@ -316,13 +329,15 @@ if secili_sablon == "📄 Standart Proforma Fatura":
     kdv_col = kolonu_bul(duzenlenmis_df.columns, {"kdv"})
     if kdv_col is not None:
         def kdv_parse(val):
+            # Boşluktan veya NaN'dan kaynaklı 0 hesaplamasını engelleyen kurtarıcı
             try:
-                v = str(val).replace('%', '').replace(',', '.').strip()
-                if not v: return 0.20
+                if pd.isna(val): return 0.20
+                v = str(val).lower().replace('%', '').replace(',', '.').strip()
+                if not v or v == 'nan' or v == 'none': return 0.20
                 return float(v) / 100.0
             except Exception:
                 return 0.20
-        # Her satırın KDV'si ayrı ayrı hesaplanıyor
+                
         satir_kdv_oranlari = duzenlenmis_df[kdv_col].apply(kdv_parse)
         kdv = (fiyatlar * satir_kdv_oranlari).sum()
     else:
