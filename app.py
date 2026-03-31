@@ -5,7 +5,7 @@ import datetime
 import os
 from fpdf import FPDF
 from docx import Document
-from docx.shared import Pt, Cm, RGBColor
+from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from openpyxl import Workbook
@@ -14,6 +14,11 @@ from openpyxl.utils import get_column_letter
 from openpyxl.drawing.image import Image as xlImage
 
 st.set_page_config(layout="wide", page_title="Doküman Oluşturucu Platform", initial_sidebar_state="expanded")
+
+# =========================================================
+# SABİTLER
+# =========================================================
+ANTET_DOSYASI = "antet.png"
 
 # --- PLATFORM ŞABLON SEÇİCİ ---
 st.sidebar.markdown("### ⚙️ Sistem Ayarları")
@@ -47,7 +52,6 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
     - %50 BEFORE WORK BEGINS,
     - %50 UPON COMPLETION OF THE WORK."""
     else:
-        # KDV ve birim fiyat yeri değiştirilmiş hali
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
             'Adet': ['1', '2'],
@@ -153,9 +157,9 @@ if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 st.write("---")
 
-# ==========================================
+# =========================================================
 # AKILLI HİZALAMA VE GENİŞLİK ALGORİTMALARI
-# ==========================================
+# =========================================================
 def get_alignment(col_name):
     name = str(col_name).lower()
     if any(x in name for x in ['fiyat', 'price', 'tutar']):
@@ -199,9 +203,9 @@ def set_excel_col_widths(ws, headers):
         else:
             ws.column_dimensions[col_letter].width = 20
 
-# ==========================================
+# =========================================================
 # ÇIKTI MOTORLARI
-# ==========================================
+# =========================================================
 def cevir_tr(metin):
     tr_map = {
         'ş': 's', 'Ş': 'S',
@@ -221,54 +225,57 @@ def get_birim_col(df_columns):
             return col
     return None
 
+# =========================================================
+# WORD OLUŞTUR
+# =========================================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
     doc = Document()
-    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
     birim_sutun = get_birim_col(dataframe.columns)
+    headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(dataframe.columns)
 
-    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        if os.path.exists("logo.png"):
-            p_logo = doc.add_paragraph()
-            p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_logo.add_run().add_picture("logo.png", width=Cm(6))
+    section = doc.sections[0]
+    section.top_margin = Cm(1.2)
+    section.bottom_margin = Cm(1.5)
+    section.left_margin = Cm(1.5)
+    section.right_margin = Cm(1.5)
 
-        p_info = doc.add_paragraph()
-        run_name = p_info.add_run("INNOMAR MARİNA YAT\nLİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş.\n")
-        run_name.bold = True
-        run_name.font.color.rgb = RGBColor(0, 51, 153)
-        run_name.font.size = Pt(10)
-        p_info.add_run("Heybeliada Mah. Kılavuz sokak zarif apt. No:16/6 heybeliada istanbul\nPhn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907\nEmail- info@innomarin.com | www.innomarin.com").font.size = Pt(9)
-        doc.add_paragraph("_" * 75)
-
-        p_title = doc.add_paragraph()
-        p_title.add_run(f"•   MY ADA DRY DOCK SERVICES QUOTATION;                                 * DATE: {tarih}").bold = True
+    # Antet görseli - header değil body içine koyuyoruz
+    if os.path.exists(ANTET_DOSYASI):
+        p_antet = doc.add_paragraph()
+        p_antet.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_antet.add_run().add_picture(ANTET_DOSYASI, width=Cm(18.0))
     else:
-        if os.path.exists("ust_bar.png"):
-            p_logo = doc.add_paragraph()
-            p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_logo.add_run().add_picture("ust_bar.png", width=Cm(16))
-            doc.add_paragraph("\n\n")
-        else:
-            doc.add_paragraph("FİRMA LOGOSU VE BİLGİLERİ\n(Lütfen 'ust_bar.png' dosyasını klasöre ekleyin)").runs[0].bold = True
-            doc.add_paragraph("_" * 75)
-            p_title = doc.add_paragraph()
-            p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_title.add_run("PROFORMA FATURA").bold = True
-            p_date = doc.add_paragraph()
-            p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            p_date.add_run(f"TARİH: {tarih}").bold = True
+        p_warn = doc.add_paragraph()
+        p_warn.add_run("UYARI: antet.png bulunamadı.").bold = True
+
+    doc.add_paragraph()
+
+    p_title = doc.add_paragraph()
+    if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        p_title.add_run("•   MY ADA DRY DOCK SERVICES QUOTATION;").bold = True
+    else:
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_title.add_run("PROFORMA FATURA").bold = True
+
+    p_date = doc.add_paragraph()
+    p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_date.add_run(f"TARİH / DATE: {tarih}").bold = True
 
     table = doc.add_table(rows=1, cols=len(headers))
     table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
     for idx, header in enumerate(headers):
-        table.rows[0].cells[idx].text = str(header)
-        table.rows[0].cells[idx].paragraphs[0].runs[0].font.bold = True
+        cell = table.rows[0].cells[idx]
+        cell.text = str(header)
+        if cell.paragraphs[0].runs:
+            cell.paragraphs[0].runs[0].font.bold = True
+
         align = get_alignment(header)
         if align == 'R':
-            table.rows[0].cells[idx].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
         elif align == 'C':
-            table.rows[0].cells[idx].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
@@ -280,21 +287,21 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             align = get_alignment(col_name)
 
             if gizle_aktif and col_name == birim_sutun:
-                row_cells[c_idx+1].text = "***"
+                row_cells[c_idx + 1].text = "***"
                 align = 'C'
             elif col_name == dataframe.columns[-1]:
                 try:
                     fiyat = float(str(val).replace(',', '.'))
-                    row_cells[c_idx+1].text = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
+                    row_cells[c_idx + 1].text = "-NIL-" if pd.isna(fiyat) or fiyat <= 0 else f"{fiyat:,.0f}".replace(",", ".") + f" {kur_m}"
                 except:
-                    row_cells[c_idx+1].text = "-NIL-"
+                    row_cells[c_idx + 1].text = "-NIL-"
             else:
-                row_cells[c_idx+1].text = str(val)
+                row_cells[c_idx + 1].text = str(val)
 
             if align == 'R':
-                row_cells[c_idx+1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                row_cells[c_idx + 1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
             elif align == 'C':
-                row_cells[c_idx+1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                row_cells[c_idx + 1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     doc.add_paragraph()
 
@@ -311,7 +318,8 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
     for row in tot_table.rows:
         row.cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        row.cells[1].paragraphs[0].runs[0].font.bold = True
+        if row.cells[1].paragraphs[0].runs:
+            row.cells[1].paragraphs[0].runs[0].font.bold = True
 
     doc.add_paragraph()
     for satir in notlar.split('\n'):
@@ -321,55 +329,35 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     doc.save(bio)
     return bio.getvalue()
 
+# =========================================================
+# PDF OLUŞTUR
+# =========================================================
 def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
     birim_sutun = get_birim_col(dataframe.columns)
 
     class PDF(FPDF):
         def header(self):
-            if self.page_no() == 1:
-                if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-                    if os.path.exists("logo.png"):
-                        self.image("logo.png", x=65, y=10, w=80)
-                    self.ln(25)
-                    self.set_font('Arial', 'B', 10)
-                    self.set_text_color(0, 51, 153)
-                    self.cell(0, 5, cevir_tr('INNOMAR MARINA YAT'), 0, 1, 'L')
-                    self.cell(0, 5, cevir_tr('LIMAN TURIZM ISLETMECILIGI VE INSAAT SANAYI VE TICARET A.S.'), 0, 1, 'L')
-                    self.set_font('Arial', '', 9)
-                    self.set_text_color(0, 0, 0)
-                    self.cell(0, 5, cevir_tr('Heybeliada Mah. Kilavuz sokak zarif apt. No:16/6 heybeliada istanbul'), 0, 1, 'L')
-                    self.cell(0, 5, 'Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907', 0, 1, 'L')
-                    self.set_text_color(0, 51, 153)
-                    self.cell(0, 5, 'Email- info@innomarin.com | www.innomarin.com', 0, 1, 'L')
-                    self.set_draw_color(0, 51, 153)
-                    self.set_line_width(0.3)
-                    self.line(10, self.get_y()+2, 200, self.get_y()+2)
-                    self.ln(10)
-                else:
-                    if os.path.exists("ust_bar.png"):
-                        self.image("ust_bar.png", x=0, y=0, w=210)
-                        self.set_y(80)
-                    else:
-                        self.set_font('Arial', 'B', 12)
-                        self.set_text_color(0, 0, 0)
-                        self.cell(0, 8, cevir_tr('FIRMA LOGOSU VE BILGILERI (ust_bar.png eksik)'), 0, 1, 'L')
-                        self.ln(10)
-                        self.set_font('Arial', 'B', 16)
-                        self.cell(0, 10, 'PROFORMA FATURA', 0, 1, 'C')
-                        self.ln(5)
-            else:
-                self.ln(15)
+            if os.path.exists(ANTET_DOSYASI):
+                self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
+            self.set_y(55)
 
     pdf = PDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_auto_page_break(auto=True, margin=20)
 
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
+
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
-        pdf.cell(130, 10, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
-        pdf.cell(60, 10, f'* DATE/TARIH: {tarih}', 0, 1, 'R')
-        pdf.ln(2)
+        pdf.cell(130, 8, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
+        pdf.cell(60, 8, f'DATE: {tarih}', 0, 1, 'R')
+    else:
+        pdf.set_font('Arial', 'B', 13)
+        pdf.cell(0, 8, 'PROFORMA FATURA', 0, 1, 'C')
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(0, 8, f'TARIH: {tarih}', 0, 1, 'R')
+
+    pdf.ln(4)
 
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'NO'] + list(dataframe.columns)
     widths = get_pdf_widths(headers)
@@ -384,7 +372,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.ln()
 
     pdf.set_font('Arial', '', 8)
-    pdf.set_fill_color(255, 255, 255)
     for index, row in dataframe.iterrows():
         pdf.cell(widths[0], 8, str(index + 1), 1, align='C', fill=True)
         for c_idx, col_name in enumerate(dataframe.columns):
@@ -403,7 +390,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             else:
                 yazilacak = cevir_tr(str(val))
 
-            pdf.cell(widths[c_idx+1], 8, yazilacak, 1, align=align, fill=True)
+            pdf.cell(widths[c_idx + 1], 8, yazilacak, 1, align=align, fill=True)
         pdf.ln()
 
     w_val = widths[-1]
@@ -417,7 +404,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             break
 
     w_label = label_w
-    w_empty = sum(widths[:-1-label_cols]) if len(widths) > label_cols + 1 else 0
+    w_empty = sum(widths[:-1 - label_cols]) if len(widths) > label_cols + 1 else 0
 
     pdf.set_font('Arial', '', 9)
     if w_empty > 0:
@@ -445,6 +432,9 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     return pdf.output(dest='S').encode('latin-1')
 
+# =========================================================
+# EXCEL OLUŞTUR
+# =========================================================
 def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
     wb = Workbook()
     ws = wb.active
@@ -454,55 +444,38 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     row_idx = 1
     birim_sutun = get_birim_col(dataframe.columns)
 
+    # Antet görseli
+    if os.path.exists(ANTET_DOSYASI):
+        img = xlImage(ANTET_DOSYASI)
+        oran = 760 / img.width
+        img.width = 760
+        img.height = int(img.height * oran)
+        ws.add_image(img, 'A1')
+        row_idx = 15
+    else:
+        ws['A1'] = "UYARI: antet.png bulunamadı."
+        ws['A1'].font = Font(bold=True, color="FF0000")
+        row_idx = 6
+
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         ws.sheet_view.showGridLines = False
-        if os.path.exists("logo.png"):
-            img = xlImage("logo.png")
-            ws.add_image(img, 'B1')
-            row_idx = 8
-        ws[f'B{row_idx}'] = "INNOMAR MARİNA YAT LİMAN TURİZM İŞLETMECİLİĞİ VE İNŞAAT SANAYİ VE TİCARET A.Ş."
-        ws[f'B{row_idx}'].font = Font(color="003399", bold=True, size=11)
-        row_idx += 1
-        ws[f'B{row_idx}'] = "Heybeliada Mah. Kılavuz sokak zarif apt. No:16/6 heybeliada istanbul"
-        row_idx += 1
-        ws[f'B{row_idx}'] = "Phn- (+90) 536 763 1911 | Mob- (+90) 541 552 1907"
-        row_idx += 1
-        ws[f'B{row_idx}'] = "Email- info@innomarin.com | www.innomarin.com"
-        ws[f'B{row_idx}'].font = Font(color="003399", size=10)
-        row_idx += 2
         ws[f'B{row_idx}'] = "• MY ADA DRY DOCK SERVICES QUOTATION;"
-        ws[f'B{row_idx}'].font = Font(bold=True)
-        ws.cell(row=row_idx, column=len(dataframe.columns)+1).value = f"* DATE: {tarih}"
-        ws.cell(row=row_idx, column=len(dataframe.columns)+1).font = Font(bold=True)
+        ws[f'B{row_idx}'].font = Font(bold=True, size=12)
+        ws.cell(row=row_idx, column=len(dataframe.columns) + 2).value = f"DATE: {tarih}"
+        ws.cell(row=row_idx, column=len(dataframe.columns) + 2).font = Font(bold=True)
         row_idx += 2
     else:
-        resim_yolu = None
-        if os.path.exists("excel_ust_bar.png"):
-            resim_yolu = "excel_ust_bar.png"
-        elif os.path.exists("ust_bar.png"):
-            resim_yolu = "ust_bar.png"
-
-        if resim_yolu:
-            img = xlImage(resim_yolu)
-            oran = 700 / img.width
-            img.width = 700
-            img.height = int(img.height * oran)
-            ws.add_image(img, 'A1')
-            row_idx = 12
-        else:
-            ws[f'A1'] = "FİRMA LOGOSU VE BİLGİLERİ (excel_ust_bar.png ekleyin)"
-            ws[f'A1'].font = Font(bold=True, size=14)
-            ws[f'C4'] = "PROFORMA FATURA"
-            ws[f'C4'].font = Font(bold=True, size=16)
-            ws[f'C4'].alignment = Alignment(horizontal="center")
-            row_idx = 12
+        ws[f'C{row_idx}'] = "PROFORMA FATURA"
+        ws[f'C{row_idx}'].font = Font(bold=True, size=16)
+        ws[f'C{row_idx}'].alignment = Alignment(horizontal="center")
 
         tarih_sutun = len(dataframe.columns) - 1
         if tarih_sutun < 4:
             tarih_sutun = 4
 
+        row_idx += 2
         ws.cell(row=row_idx, column=1).value = "Fatura Kesilen:"
-        ws.cell(row=row_idx, column=1).font = Font(bold=True, size=14)
+        ws.cell(row=row_idx, column=1).font = Font(bold=True, size=12)
         ws.cell(row=row_idx, column=tarih_sutun).value = "Fatura Numarası: ........................"
         ws.cell(row=row_idx, column=tarih_sutun).font = Font(size=12)
 
@@ -511,8 +484,8 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         ws.cell(row=row_idx, column=1).font = Font(size=12)
         ws.cell(row=row_idx, column=tarih_sutun).value = "Fatura Tarihi:"
         ws.cell(row=row_idx, column=tarih_sutun).font = Font(bold=True, size=12)
-        ws.cell(row=row_idx, column=tarih_sutun+1).value = tarih
-        ws.cell(row=row_idx, column=tarih_sutun+1).font = Font(bold=True, size=12)
+        ws.cell(row=row_idx, column=tarih_sutun + 1).value = tarih
+        ws.cell(row=row_idx, column=tarih_sutun + 1).font = Font(bold=True, size=12)
 
         row_idx += 1
         ws.cell(row=row_idx, column=1).value = "Adres: ........................................................................"
@@ -541,6 +514,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         cell.font = Font(bold=True)
         cell.border = thin_border
         cell.fill = bg_fill
+
         align = get_alignment(header)
         if align == 'R':
             cell.alignment = Alignment(horizontal="right")
@@ -558,7 +532,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
         for c_idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
-            cell = ws.cell(row=row_idx, column=c_idx+2)
+            cell = ws.cell(row=row_idx, column=c_idx + 2)
             align = get_alignment(col_name)
 
             if gizle_aktif and col_name == birim_sutun:
@@ -626,6 +600,14 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     output = io.BytesIO()
     wb.save(output)
     return output.getvalue()
+
+# =========================================================
+# DOSYA DURUM BİLGİSİ
+# =========================================================
+if os.path.exists(ANTET_DOSYASI):
+    st.success("✅ antet.png bulundu. Çıktılarda antet kullanılacak.")
+else:
+    st.warning("⚠️ antet.png bulunamadı. Word / Excel / PDF çıktılarında antet görünmeyecek.")
 
 # --- İNDİRME BUTONLARI ---
 st.markdown("### 📥 Çıktı Al")
