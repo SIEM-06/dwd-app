@@ -6,7 +6,7 @@ import os
 
 from fpdf import FPDF
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
@@ -366,13 +366,13 @@ st.text_area(
     placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz..."
 )
 
-if st.button("🔄Notları Kaydet"):
+if st.button("🔄 Notları Kaydet"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
 st.write("---")
 
 # =========================================================
-# WORD OLUŞTUR (HİZALAMA SORUNU BURADA ÇÖZÜLDÜ)
+# WORD OLUŞTUR
 # =========================================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
     df_out = dataframe.copy()
@@ -389,6 +389,13 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         doc = Document()
         p_warn = doc.add_paragraph()
         p_warn.add_run("UYARI: word_template.docx bulunamadı.").bold = True
+
+    # KANKA: WORD SAYFA KENAR BOŞLUKLARI (Logoya binmemesi için üstten 7.5 cm boşluk)
+    for section in doc.sections:
+        section.top_margin = Cm(7.5)
+        section.bottom_margin = Cm(4.5)
+        section.left_margin = Cm(2.0)
+        section.right_margin = Cm(2.0)
 
     doc.add_paragraph()
 
@@ -447,7 +454,12 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             elif align == 'C':
                 row_cells[c_idx + 1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    # KANKA: İKİNCİ TABLO YERİNE TOPLAMLARI ANA TABLOYA EKLİYORUZ (HİZALAMA KUSURSUZ OLUYOR)
+    doc.add_paragraph()
+
+    tot_table = doc.add_table(rows=3, cols=2)
+    guvenli_table_style(tot_table, "Table Grid")
+    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
+
     labels = (
         ["TOTAL PRICE", "VAT (20%)", "GRAND TOTAL"]
         if sablon_tipi == "⚓ INNOMAR Özel Teklif"
@@ -456,24 +468,17 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     values = [a_str, k_str, g_str]
 
     for i in range(3):
-        row_cells = table.add_row().cells
-        
-        # Sol kısımdaki boşlukları birleştirip ana tablonun Tutar sütununa yapıştırıyoruz
-        if len(headers) > 2:
-            row_cells[0].merge(row_cells[-3])
-            row_cells[0].text = ""
-            
-        row_cells[-2].text = ""
-        r1 = row_cells[-2].paragraphs[0].add_run(labels[i])
-        r1.bold = True
-        r1.font.size = Pt(9)
-        row_cells[-2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        
-        row_cells[-1].text = ""
-        r2 = row_cells[-1].paragraphs[0].add_run(values[i])
-        r2.bold = True
-        r2.font.size = Pt(9)
-        row_cells[-1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        tot_table.rows[i].cells[0].text = labels[i]
+        tot_table.rows[i].cells[1].text = values[i]
+
+        tot_table.rows[i].cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        tot_table.rows[i].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        if tot_table.rows[i].cells[1].paragraphs[0].runs:
+            tot_table.rows[i].cells[1].paragraphs[0].runs[0].font.bold = True
+
+        if i == 2 and tot_table.rows[i].cells[0].paragraphs[0].runs:
+            tot_table.rows[i].cells[0].paragraphs[0].runs[0].font.bold = True
 
     doc.add_paragraph()
 
@@ -500,7 +505,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
-            self.set_y(55)
+            # KANKA: PDF İÇİN ÜST BOŞLUK (Logoya binmemesi için 7.5 cm = 75 mm)
+            self.set_y(75)
 
     pdf = PDF()
     pdf.add_page()
@@ -612,7 +618,8 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         img.width = 760
         img.height = int(img.height * oran)
         ws.add_image(img, 'A1')
-        row_idx = 15
+        # KANKA: EXCEL İÇİN ÜST BOŞLUK (Logoyu kurtarmak için 15'ten 18'e alındı)
+        row_idx = 18
     else:
         ws['A1'] = "UYARI: antet.png bulunamadı."
         ws['A1'].font = Font(bold=True, color="FF0000")
