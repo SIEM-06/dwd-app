@@ -110,6 +110,52 @@ def guvenli_table_style(table, style_name="Table Grid"):
     except Exception:
         pass
 
+def kolonu_bul(columns, adaylar):
+    for col in columns:
+        low = str(col).strip().lower()
+        if low in adaylar:
+            return col
+    return None
+
+def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
+    """
+    Standart Proforma Fatura için:
+    - KDV sütunu varsa tüm satırlar %20 yapılır
+    - Adet * Birim Fiyatı = Tutar otomatik hesaplanır
+    """
+    df = dataframe.copy()
+
+    if sablon_tipi != "📄 Standart Proforma Fatura":
+        return df
+
+    kdv_col = kolonu_bul(df.columns, {"kdv"})
+    adet_col = kolonu_bul(df.columns, {"adet", "qty", "quantity", "miktar"})
+    birim_col = kolonu_bul(df.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
+    tutar_col = kolonu_bul(df.columns, {"tutar", "total", "amount"})
+
+    # KDV her satırda sabit %20
+    if kdv_col is not None:
+        df[kdv_col] = "%20"
+
+    # Tutar = Adet x Birim Fiyatı
+    if adet_col is not None and birim_col is not None and tutar_col is not None:
+        adet_seri = pd.to_numeric(df[adet_col], errors="coerce").fillna(0)
+        birim_seri = pd.to_numeric(df[birim_col], errors="coerce").fillna(0)
+        df[tutar_col] = adet_seri * birim_seri
+
+    return df
+
+def toplam_sutununu_bul(dataframe, sablon_tipi):
+    """
+    Standart faturada mümkünse Tutar sütununu kullan.
+    Yoksa son sütuna düş.
+    """
+    if sablon_tipi == "📄 Standart Proforma Fatura":
+        tutar_col = kolonu_bul(dataframe.columns, {"tutar", "total", "amount"})
+        if tutar_col is not None:
+            return tutar_col
+    return dataframe.columns[-1]
+
 # =========================================================
 # PLATFORM ŞABLON SEÇİCİ
 # =========================================================
@@ -146,9 +192,9 @@ if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != se
     else:
         data = {
             'Açıklama': ['Örnek Hizmet', ''],
-            'Adet': ['1', '2'],
+            'Adet': [1, 2],
             'KDV': ['%20', '%20'],
-            'Birim Fiyatı': ['1000', '500'],
+            'Birim Fiyatı': [1000.0, 500.0],
             'Tutar': [1000.0, 1000.0]
         }
         st.session_state.not_alani = ""
@@ -208,6 +254,13 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         else:
             yeni_df[col] = ""
 
+    # Standart faturada KDV varsa hep %20 yap
+    if secili_sablon == "📄 Standart Proforma Fatura":
+        kdv_col = kolonu_bul(yeni_df.columns, {"kdv"})
+        if kdv_col is not None:
+            yeni_df[kdv_col] = "%20"
+
+    # Son sütunu numerik yap
     son_sutun_adi = yeni_sutunlar[-1]
     yeni_df[son_sutun_adi] = pd.to_numeric(
         yeni_df[son_sutun_adi],
@@ -218,17 +271,35 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.rerun()
 
 df = st.session_state.veri_df.copy()
-son_sutun = df.columns[-1]
-df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
+
+# Standart şablonda Tutar hesaplanabilsin diye uygun kolonları numeric yap
+if secili_sablon == "📄 Standart Proforma Fatura":
+    adet_col = kolonu_bul(df.columns, {"adet", "qty", "quantity", "miktar"})
+    birim_col = kolonu_bul(df.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
+    tutar_col = kolonu_bul(df.columns, {"tutar", "total", "amount"})
+
+    if adet_col is not None:
+        df[adet_col] = pd.to_numeric(df[adet_col], errors='coerce').fillna(0)
+    if birim_col is not None:
+        df[birim_col] = pd.to_numeric(df[birim_col], errors='coerce').fillna(0.0)
+    if tutar_col is not None:
+        df[tutar_col] = pd.to_numeric(df[tutar_col], errors='coerce').fillna(0.0)
+else:
+    son_sutun = df.columns[-1]
+    df[son_sutun] = pd.to_numeric(df[son_sutun], errors='coerce').fillna(0.0)
 
 col_config = {}
-for col in df.columns[:-1]:
-    col_config[col] = st.column_config.TextColumn(col)
+for col in df.columns:
+    low = str(col).strip().lower()
 
-col_config[son_sutun] = st.column_config.NumberColumn(
-    son_sutun,
-    format=f"%d {sembol}"
-)
+    if low in {"adet", "qty", "quantity", "miktar"}:
+        col_config[col] = st.column_config.NumberColumn(col, format="%d")
+    elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "price", "tutar", "total", "amount"}:
+        col_config[col] = st.column_config.NumberColumn(col, format=f"%d {sembol}")
+    elif low == "kdv" and secili_sablon == "📄 Standart Proforma Fatura":
+        col_config[col] = st.column_config.TextColumn(col, disabled=True)
+    else:
+        col_config[col] = st.column_config.TextColumn(col)
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için tablonun en altını kullanın.")
 
@@ -239,10 +310,18 @@ duzenlenmis_df = st.data_editor(
     use_container_width=True
 )
 
+# Otomatik hesapları uygula
+duzenlenmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
+
+# Session'a güncel halini yaz
+st.session_state.veri_df = duzenlenmis_df.copy()
+
 # =========================================================
 # HESAPLAMALAR
 # =========================================================
-fiyatlar = pd.to_numeric(duzenlenmis_df[son_sutun], errors='coerce').fillna(0)
+toplam_sutunu = toplam_sutununu_bul(duzenlenmis_df, secili_sablon)
+fiyatlar = pd.to_numeric(duzenlenmis_df[toplam_sutunu], errors='coerce').fillna(0)
+
 ara_toplam = fiyatlar.sum()
 kdv = ara_toplam * 0.20
 genel_toplam = ara_toplam + kdv
@@ -330,7 +409,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             if gizle_aktif and col_name == birim_sutun:
                 text_val = "***"
                 align = 'C'
-            elif col_name == dataframe.columns[-1]:
+            elif str(col_name).strip().lower() in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 text_val = format_money_value(val, kur_m)
             else:
                 text_val = str(val)
@@ -431,11 +510,12 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         for c_idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
             align = get_alignment(col_name)
+            low = str(col_name).strip().lower()
 
             if gizle_aktif and col_name == birim_sutun:
                 yazilacak = "***"
                 align = 'C'
-            elif col_name == dataframe.columns[-1]:
+            elif low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 yazilacak = format_money_value(val, kur_m)
             else:
                 yazilacak = cevir_tr(str(val))
@@ -585,11 +665,12 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
             val = row[col_name]
             cell = ws.cell(row=row_idx, column=c_idx + 2)
             align = get_alignment(col_name)
+            low = str(col_name).strip().lower()
 
             if gizle_aktif and col_name == birim_sutun:
                 cell.value = "***"
                 cell.alignment = Alignment(horizontal="center")
-            elif col_name == dataframe.columns[-1]:
+            elif low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 cell.value = format_money_value(val, kur_m)
                 if align == 'R':
                     cell.alignment = Alignment(horizontal="right")
