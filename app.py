@@ -366,7 +366,7 @@ st.text_area(
     placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz..."
 )
 
-if st.button("🔄 Notları Kaydet"):
+if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
 st.write("---")
@@ -387,26 +387,26 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         doc = Document(WORD_TEMPLATE)
     else:
         doc = Document()
-        # Uyarı mesajını kapattım temiz görünsün diye
 
-    # KANKA: LOGOYU HEADER'A KOYUYORUZ (Aşağı inmesini engeller) VE BODY'Yİ 8.5 CM'DEN BAŞLATIYORUZ
+    # KANKA: LOGO TEPEDE SABİT KALACAK, YAZILAR AŞAĞIDAN BAŞLAYACAK!
     for section in doc.sections:
-        section.top_margin = Cm(8.5)      # Fatura yazılarının başlayacağı yer (aşağıda)
+        section.top_margin = Cm(2.0)       # Normal üst boşluk (Logo yukarıda kalsın diye)
         section.bottom_margin = Cm(4.5)
         section.left_margin = Cm(2.0)
         section.right_margin = Cm(2.0)
-        section.header_distance = Cm(1.27) # Logonun sayfanın en üstünden mesafesi (sabit kalır)
+        section.header_distance = Cm(1.0)  # Logonun sayfa ucuyla mesafesi çok az (Tepede durur)
         
-        # Logoyu doğrudan Üst Bilgiye (Header) yapıştırıyoruz
+        # Logoyu doğrudan Üst Bilgiye (Header) sabitliyoruz
         if os.path.exists("ust_bar.png"):
             header = section.header
             p_logo = header.paragraphs[0] if len(header.paragraphs) > 0 else header.add_paragraph()
             p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_logo.text = "" # Varsa eski metni temizle
+            p_logo.text = "" 
             r_logo = p_logo.add_run()
             r_logo.add_picture("ust_bar.png", width=Cm(17))
 
-    doc.add_paragraph()
+    # Yazıların logonun üzerinden taşıp aşağı inmesi için (Yaklaşık 8.5 cm hizasına) boşluk atıyoruz.
+    doc.add_paragraph("\n\n\n")
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         p_title = doc.add_paragraph()
