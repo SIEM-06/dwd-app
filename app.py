@@ -120,7 +120,7 @@ def kolonu_bul(columns, adaylar):
 def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
     """
     Standart Proforma Fatura için:
-    - KDV sütunu varsa tüm satırlar %20 yapılır
+    - KDV sütunundaki boş satırlar %20 yapılır, doluysa bozulmaz
     - Adet * Birim Fiyatı = Tutar otomatik hesaplanır
     """
     if sablon_tipi != "📄 Standart Proforma Fatura":
@@ -132,7 +132,8 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
     tutar_col = kolonu_bul(dataframe.columns, {"tutar", "total", "amount"})
 
     if kdv_col is not None:
-        dataframe[kdv_col] = "%20"
+        # Sadece boş (NaN veya boş string) olan hücreleri %20 ile doldur, user verisini ezme
+        dataframe[kdv_col] = dataframe[kdv_col].apply(lambda x: "%20" if pd.isna(x) or str(x).strip() == "" else x)
 
     if adet_col is not None and birim_col is not None and tutar_col is not None:
         adet_seri = pd.to_numeric(dataframe[adet_col], errors="coerce").fillna(0)
@@ -249,7 +250,8 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     if secili_sablon == "📄 Standart Proforma Fatura":
         kdv_col = kolonu_bul(yeni_df.columns, {"kdv"})
         if kdv_col is not None:
-            yeni_df[kdv_col] = "%20"
+            # Dinamik sütun yönetiminde yeni eklenen satırlar için sadece boş olanları doldur
+            yeni_df[kdv_col] = yeni_df[kdv_col].apply(lambda x: "%20" if pd.isna(x) or str(x).strip() == "" else x)
 
     son_sutun_adi = yeni_sutunlar[-1]
     yeni_df[son_sutun_adi] = pd.to_numeric(
@@ -260,7 +262,6 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-# Burada copy() yok, performans için direkt referans
 df = st.session_state.veri_df
 
 if secili_sablon == "📄 Standart Proforma Fatura":
@@ -287,7 +288,7 @@ for col in df.columns:
     elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "price", "tutar", "total", "amount"}:
         col_config[col] = st.column_config.NumberColumn(col, format=f"%d {sembol}")
     elif low == "kdv" and secili_sablon == "📄 Standart Proforma Fatura":
-        col_config[col] = st.column_config.TextColumn(col, disabled=True)
+        col_config[col] = st.column_config.TextColumn(col) # Artık KDV düzenlenebilir!
     else:
         col_config[col] = st.column_config.TextColumn(col)
 
@@ -303,17 +304,32 @@ duzenlenmis_df = st.data_editor(
 
 duzenlenmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
 
-# Burada özellikle tekrar session'a yazmıyoruz
-# st.session_state.veri_df = duzenlenmis_df.copy()  -> kaldırıldı
-
 # =========================================================
-# HESAPLAMALAR
+# HESAPLAMALAR (HER SATIR İÇİN AYRI KDV HESABI EKLENDİ)
 # =========================================================
 toplam_sutunu = toplam_sutununu_bul(duzenlenmis_df, secili_sablon)
 fiyatlar = pd.to_numeric(duzenlenmis_df[toplam_sutunu], errors='coerce').fillna(0)
 
 ara_toplam = fiyatlar.sum()
-kdv = ara_toplam * 0.20
+
+if secili_sablon == "📄 Standart Proforma Fatura":
+    kdv_col = kolonu_bul(duzenlenmis_df.columns, {"kdv"})
+    if kdv_col is not None:
+        def kdv_parse(val):
+            try:
+                v = str(val).replace('%', '').replace(',', '.').strip()
+                if not v: return 0.20
+                return float(v) / 100.0
+            except Exception:
+                return 0.20
+        # Her satırın KDV'si ayrı ayrı hesaplanıyor
+        satir_kdv_oranlari = duzenlenmis_df[kdv_col].apply(kdv_parse)
+        kdv = (fiyatlar * satir_kdv_oranlari).sum()
+    else:
+        kdv = ara_toplam * 0.20
+else:
+    kdv = ara_toplam * 0.20
+
 genel_toplam = ara_toplam + kdv
 
 ara_str = f"{ara_toplam:,.0f}".replace(",", ".") + f" {kur_metin}"
@@ -323,7 +339,7 @@ genel_str = f"{genel_toplam:,.0f}".replace(",", ".") + f" {kur_metin}"
 st.write("---")
 col_a, col_b, col_c = st.columns(3)
 col_a.metric("Ara Toplam", ara_str)
-col_b.metric("KDV (%20)", kdv_str)
+col_b.metric("KDV Tutarı", kdv_str)
 col_c.metric("Genel Toplam", genel_str)
 st.write("---")
 
@@ -423,7 +439,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     labels = (
         ["TOTAL PRICE", "VAT (20%)", "GRAND TOTAL"]
         if sablon_tipi == "⚓ INNOMAR Özel Teklif"
-        else ["Ara Toplam", "KDV % 20", "GENEL TOPLAM"]
+        else ["Ara Toplam", "KDV", "GENEL TOPLAM"]
     )
     values = [a_str, k_str, g_str]
 
@@ -537,7 +553,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_font('Arial', '', 9)
     if w_empty > 0:
         pdf.cell(w_empty, 8, '', 0, 0)
-    pdf.cell(w_label, 8, 'KDV % 20' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'R')
+    pdf.cell(w_label, 8, 'KDV' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'VAT (20%)', 1, 0, 'R')
     pdf.set_font('Arial', 'B', 9)
     pdf.cell(w_val, 8, k_str, 1, 1, 'R')
 
@@ -692,7 +708,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     ws.cell(row=row_idx, column=val_col).alignment = Alignment(horizontal="right")
     row_idx += 1
 
-    ws.cell(row=row_idx, column=tot_col).value = "KDV % 20" if sablon_tipi != "⚓ INNOMAR Özel Teklif" else "VAT (20%)"
+    ws.cell(row=row_idx, column=tot_col).value = "KDV" if sablon_tipi != "⚓ INNOMAR Özel Teklif" else "VAT (20%)"
     ws.cell(row=row_idx, column=tot_col).border = thin_border
     ws.cell(row=row_idx, column=val_col).value = k_str
     ws.cell(row=row_idx, column=val_col).font = Font(bold=True)
