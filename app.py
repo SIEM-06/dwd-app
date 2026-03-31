@@ -372,7 +372,7 @@ if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
 st.write("---")
 
 # =========================================================
-# WORD OLUŞTUR
+# WORD OLUŞTUR (HİZALAMA SORUNU BURADA ÇÖZÜLDÜ)
 # =========================================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
     df_out = dataframe.copy()
@@ -447,12 +447,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             elif align == 'C':
                 row_cells[c_idx + 1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    doc.add_paragraph()
-
-    tot_table = doc.add_table(rows=3, cols=2)
-    guvenli_table_style(tot_table, "Table Grid")
-    tot_table.alignment = WD_TABLE_ALIGNMENT.RIGHT
-
+    # KANKA: İKİNCİ TABLO YERİNE TOPLAMLARI ANA TABLOYA EKLİYORUZ (HİZALAMA KUSURSUZ OLUYOR)
     labels = (
         ["TOTAL PRICE", "VAT (20%)", "GRAND TOTAL"]
         if sablon_tipi == "⚓ INNOMAR Özel Teklif"
@@ -461,17 +456,24 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     values = [a_str, k_str, g_str]
 
     for i in range(3):
-        tot_table.rows[i].cells[0].text = labels[i]
-        tot_table.rows[i].cells[1].text = values[i]
-
-        tot_table.rows[i].cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        tot_table.rows[i].cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-
-        if tot_table.rows[i].cells[1].paragraphs[0].runs:
-            tot_table.rows[i].cells[1].paragraphs[0].runs[0].font.bold = True
-
-        if i == 2 and tot_table.rows[i].cells[0].paragraphs[0].runs:
-            tot_table.rows[i].cells[0].paragraphs[0].runs[0].font.bold = True
+        row_cells = table.add_row().cells
+        
+        # Sol kısımdaki boşlukları birleştirip ana tablonun Tutar sütununa yapıştırıyoruz
+        if len(headers) > 2:
+            row_cells[0].merge(row_cells[-3])
+            row_cells[0].text = ""
+            
+        row_cells[-2].text = ""
+        r1 = row_cells[-2].paragraphs[0].add_run(labels[i])
+        r1.bold = True
+        r1.font.size = Pt(9)
+        row_cells[-2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        
+        row_cells[-1].text = ""
+        r2 = row_cells[-1].paragraphs[0].add_run(values[i])
+        r2.bold = True
+        r2.font.size = Pt(9)
+        row_cells[-1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
     doc.add_paragraph()
 
@@ -502,7 +504,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     pdf = PDF()
     pdf.add_page()
-    # KANKA: İŞTE O TAŞMA SORUNUNU ÇÖZEN SİHİRLİ DOKUNUŞ (Margin 20 -> 45 yapıldı)
     pdf.set_auto_page_break(auto=True, margin=45)
 
     pdf.set_font('Arial', 'B', 10)
