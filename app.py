@@ -6,7 +6,7 @@ import os
 
 from fpdf import FPDF
 from docx import Document
-from docx.shared import Pt, Cm
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
@@ -127,7 +127,9 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
         elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "tutar", "total", "amount"}:
             df_calc[col] = pd.to_numeric(df_calc[col], errors="coerce").fillna(0.0)
         elif low == "kdv" and sablon_tipi == "📄 Standart Proforma Fatura":
-            df_calc[col] = df_calc[col].apply(lambda x: "%20" if pd.isna(x) or str(x).strip() == "" or str(x).strip().lower() == "nan" else x)
+            df_calc[col] = df_calc[col].apply(
+                lambda x: "%20" if pd.isna(x) or str(x).strip() == "" or str(x).strip().lower() == "nan" else x
+            )
         else:
             df_calc[col] = df_calc[col].fillna("")
 
@@ -149,6 +151,13 @@ def toplam_sutununu_bul(dataframe, sablon_tipi):
         if tutar_col is not None:
             return tutar_col
     return dataframe.columns[-1]
+
+def word_body_temizle(doc):
+    body = doc._element.body
+    for child in list(body):
+        if child.tag.endswith('sectPr'):
+            continue
+        body.remove(child)
 
 # =========================================================
 # PLATFORM ŞABLON SEÇİCİ
@@ -258,10 +267,10 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.rerun()
 
 # =========================================================
-# TABLO EDİTÖRÜ 
+# TABLO EDİTÖRÜ
 # =========================================================
 df_ui = st.session_state.veri_df.copy()
-df_ui.index = df_ui.index + 1 
+df_ui.index = df_ui.index + 1
 
 col_config = {}
 for col in df_ui.columns:
@@ -281,7 +290,7 @@ duzenlenmis_df_ui = st.data_editor(
     column_config=col_config,
     num_rows="dynamic",
     use_container_width=True,
-    hide_index=False, 
+    hide_index=False,
     key="veri_editoru"
 )
 
@@ -331,13 +340,15 @@ if secili_sablon == "📄 Standart Proforma Fatura":
     if kdv_col is not None:
         def kdv_parse(val):
             try:
-                if pd.isna(val): return 0.20
+                if pd.isna(val):
+                    return 0.20
                 v = str(val).lower().replace('%', '').replace(',', '.').strip()
-                if not v or v == 'nan' or v == 'none': return 0.20
+                if not v or v == 'nan' or v == 'none':
+                    return 0.20
                 return float(v) / 100.0
             except Exception:
                 return 0.20
-                
+
         satir_kdv_oranlari = duzenlenmis_df[kdv_col].apply(kdv_parse)
         kdv = (fiyatlar * satir_kdv_oranlari).sum()
     else:
@@ -380,36 +391,37 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         birim_sutun = get_birim_col(df_out.columns)
         if birim_sutun:
             df_out = df_out.drop(columns=[birim_sutun])
-            
+
     headers = ['Sıra' if sablon_tipi != "⚓ INNOMAR Özel Teklif" else 'ITEM NO'] + list(df_out.columns)
 
     if os.path.exists(WORD_TEMPLATE):
         doc = Document(WORD_TEMPLATE)
+        word_body_temizle(doc)
     else:
         doc = Document()
         p_warn = doc.add_paragraph()
         p_warn.add_run("UYARI: word_template.docx bulunamadı.").bold = True
 
-    # KANKA: WORD SAYFA KENAR BOŞLUKLARI (Logoya binmemesi için üstten 7.5 cm boşluk)
-    for section in doc.sections:
-        section.top_margin = Cm(7.5)
-        section.bottom_margin = Cm(4.5)
-        section.left_margin = Cm(2.0)
-        section.right_margin = Cm(2.0)
-
-    doc.add_paragraph()
+    doc.add_paragraph("")
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         p_title = doc.add_paragraph()
-        p_title.add_run("•   MY ADA DRY DOCK SERVICES QUOTATION;").bold = True
+        p_title.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        run = p_title.add_run("•   MY ADA DRY DOCK SERVICES QUOTATION;")
+        run.bold = True
+        run.font.size = Pt(11)
     else:
         p_title = doc.add_paragraph()
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_title.add_run("PROFORMA FATURA").bold = True
+        run = p_title.add_run("PROFORMA FATURA")
+        run.bold = True
+        run.font.size = Pt(11)
 
     p_date = doc.add_paragraph()
     p_date.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    p_date.add_run(f"TARİH / DATE: {tarih}").bold = True
+    run = p_date.add_run(f"TARİH / DATE: {tarih}")
+    run.bold = True
+    run.font.size = Pt(10)
 
     table = doc.add_table(rows=1, cols=len(headers))
     guvenli_table_style(table, "Table Grid")
@@ -454,7 +466,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             elif align == 'C':
                 row_cells[c_idx + 1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    doc.add_paragraph()
+    doc.add_paragraph("")
 
     tot_table = doc.add_table(rows=3, cols=2)
     guvenli_table_style(tot_table, "Table Grid")
@@ -480,7 +492,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         if i == 2 and tot_table.rows[i].cells[0].paragraphs[0].runs:
             tot_table.rows[i].cells[0].paragraphs[0].runs[0].font.bold = True
 
-    doc.add_paragraph()
+    doc.add_paragraph("")
 
     for satir in str(notlar).split('\n'):
         p = doc.add_paragraph(satir)
@@ -505,8 +517,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
-            # KANKA: PDF İÇİN ÜST BOŞLUK (Logoya binmemesi için 7.5 cm = 75 mm)
-            self.set_y(75)
+            self.set_y(55)
 
     pdf = PDF()
     pdf.add_page()
@@ -604,7 +615,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         birim_sutun = get_birim_col(df_out.columns)
         if birim_sutun:
             df_out = df_out.drop(columns=[birim_sutun])
-            
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Belge"
@@ -618,8 +629,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
         img.width = 760
         img.height = int(img.height * oran)
         ws.add_image(img, 'A1')
-        # KANKA: EXCEL İÇİN ÜST BOŞLUK (Logoyu kurtarmak için 15'ten 18'e alındı)
-        row_idx = 18
+        row_idx = 15
     else:
         ws['A1'] = "UYARI: antet.png bulunamadı."
         ws['A1'].font = Font(bold=True, color="FF0000")
