@@ -123,33 +123,25 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
     - KDV sütunu varsa tüm satırlar %20 yapılır
     - Adet * Birim Fiyatı = Tutar otomatik hesaplanır
     """
-    df = dataframe.copy()
-
     if sablon_tipi != "📄 Standart Proforma Fatura":
-        return df
+        return dataframe
 
-    kdv_col = kolonu_bul(df.columns, {"kdv"})
-    adet_col = kolonu_bul(df.columns, {"adet", "qty", "quantity", "miktar"})
-    birim_col = kolonu_bul(df.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
-    tutar_col = kolonu_bul(df.columns, {"tutar", "total", "amount"})
+    kdv_col = kolonu_bul(dataframe.columns, {"kdv"})
+    adet_col = kolonu_bul(dataframe.columns, {"adet", "qty", "quantity", "miktar"})
+    birim_col = kolonu_bul(dataframe.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
+    tutar_col = kolonu_bul(dataframe.columns, {"tutar", "total", "amount"})
 
-    # KDV her satırda sabit %20
     if kdv_col is not None:
-        df[kdv_col] = "%20"
+        dataframe[kdv_col] = "%20"
 
-    # Tutar = Adet x Birim Fiyatı
     if adet_col is not None and birim_col is not None and tutar_col is not None:
-        adet_seri = pd.to_numeric(df[adet_col], errors="coerce").fillna(0)
-        birim_seri = pd.to_numeric(df[birim_col], errors="coerce").fillna(0)
-        df[tutar_col] = adet_seri * birim_seri
+        adet_seri = pd.to_numeric(dataframe[adet_col], errors="coerce").fillna(0)
+        birim_seri = pd.to_numeric(dataframe[birim_col], errors="coerce").fillna(0)
+        dataframe[tutar_col] = adet_seri * birim_seri
 
-    return df
+    return dataframe
 
 def toplam_sutununu_bul(dataframe, sablon_tipi):
-    """
-    Standart faturada mümkünse Tutar sütununu kullan.
-    Yoksa son sütuna düş.
-    """
     if sablon_tipi == "📄 Standart Proforma Fatura":
         tutar_col = kolonu_bul(dataframe.columns, {"tutar", "total", "amount"})
         if tutar_col is not None:
@@ -254,13 +246,11 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
         else:
             yeni_df[col] = ""
 
-    # Standart faturada KDV varsa hep %20 yap
     if secili_sablon == "📄 Standart Proforma Fatura":
         kdv_col = kolonu_bul(yeni_df.columns, {"kdv"})
         if kdv_col is not None:
             yeni_df[kdv_col] = "%20"
 
-    # Son sütunu numerik yap
     son_sutun_adi = yeni_sutunlar[-1]
     yeni_df[son_sutun_adi] = pd.to_numeric(
         yeni_df[son_sutun_adi],
@@ -270,9 +260,9 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     st.session_state.veri_df = yeni_df
     st.rerun()
 
-df = st.session_state.veri_df.copy()
+# Burada copy() yok, performans için direkt referans
+df = st.session_state.veri_df
 
-# Standart şablonda Tutar hesaplanabilsin diye uygun kolonları numeric yap
 if secili_sablon == "📄 Standart Proforma Fatura":
     adet_col = kolonu_bul(df.columns, {"adet", "qty", "quantity", "miktar"})
     birim_col = kolonu_bul(df.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
@@ -307,14 +297,14 @@ duzenlenmis_df = st.data_editor(
     df,
     column_config=col_config,
     num_rows="dynamic",
-    use_container_width=True
+    use_container_width=True,
+    key="veri_editoru"
 )
 
-# Otomatik hesapları uygula
 duzenlenmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
 
-# Session'a güncel halini yaz
-st.session_state.veri_df = duzenlenmis_df.copy()
+# Burada özellikle tekrar session'a yazmıyoruz
+# st.session_state.veri_df = duzenlenmis_df.copy()  -> kaldırıldı
 
 # =========================================================
 # HESAPLAMALAR
@@ -398,18 +388,18 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
     for index, row in dataframe.iterrows():
         row_cells = table.add_row().cells
-
         row_cells[0].text = str(index + 1)
         row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         for c_idx, col_name in enumerate(dataframe.columns):
             val = row[col_name]
             align = get_alignment(col_name)
+            low = str(col_name).strip().lower()
 
             if gizle_aktif and col_name == birim_sutun:
                 text_val = "***"
                 align = 'C'
-            elif str(col_name).strip().lower() in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
+            elif low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 text_val = format_money_value(val, kur_m)
             else:
                 text_val = str(val)
