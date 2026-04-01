@@ -514,7 +514,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
-            self.set_y(75)
+            self.set_y(65)
 
     pdf = PDF()
     pdf.add_page()
