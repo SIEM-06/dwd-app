@@ -366,7 +366,7 @@ st.text_area(
     placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz..."
 )
 
-if st.button("🔄 Notları Kaydet"):
+if st.button("🔄 Notları Sisteme Kaydet (İndirmeden Önce Basın)"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
 st.write("---")
@@ -388,15 +388,13 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     else:
         doc = Document()
 
-    # KANKA: LOGO TEPEDE SABİT KALACAK, YAZILAR AŞAĞIDAN BAŞLAYACAK!
     for section in doc.sections:
-        section.top_margin = Cm(2.0)       # Normal üst boşluk (Logo yukarıda kalsın diye)
+        section.top_margin = Cm(2.0)       
         section.bottom_margin = Cm(4.5)
         section.left_margin = Cm(2.0)
         section.right_margin = Cm(2.0)
-        section.header_distance = Cm(1.0)  # Logonun sayfa ucuyla mesafesi çok az (Tepede durur)
+        section.header_distance = Cm(1.0)  
         
-        # Logoyu doğrudan Üst Bilgiye (Header) sabitliyoruz
         if os.path.exists("ust_bar.png"):
             header = section.header
             p_logo = header.paragraphs[0] if len(header.paragraphs) > 0 else header.add_paragraph()
@@ -405,7 +403,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             r_logo = p_logo.add_run()
             r_logo.add_picture("ust_bar.png", width=Cm(17))
 
-    # Yazıların logonun üzerinden taşıp aşağı inmesi için (Yaklaşık 8.5 cm hizasına) boşluk atıyoruz.
     doc.add_paragraph("\n\n\n")
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
@@ -450,6 +447,13 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
             if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 text_val = format_money_value(val, kur_m)
+            elif low in {"adet", "qty", "quantity", "miktar", "unit"}:
+                # KANKA: İŞTE O ADET KISMINI TAMSAYI YAPAN SİHİRLİ KOD BURADA
+                try:
+                    f_val = float(val)
+                    text_val = str(int(f_val)) if f_val.is_integer() else str(val)
+                except:
+                    text_val = str(val)
             else:
                 text_val = str(val)
 
@@ -514,7 +518,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
-            self.set_y(65)
 
     pdf = PDF()
     pdf.add_page()
@@ -524,11 +527,16 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_text_color(0, 0, 0)
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
+        pdf.set_y(85)
         pdf.cell(130, 8, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
         pdf.cell(60, 8, f'DATE: {tarih}', 0, 1, 'R')
     else:
+        # KANKA: PROFORMA FATURA BAŞLIĞI SADECE YUKARIDAN BAŞLIYOR (65. mm'den)
+        pdf.set_y(65)
         pdf.set_font('Arial', 'B', 13)
         pdf.cell(0, 8, 'PROFORMA FATURA', 0, 1, 'C')
+        # KANKA: TARİH VE TABLO ESKİ YERİNDEN (85. mm'den) DEVAM EDİYOR Kİ LOGOYU EZMESİN
+        pdf.set_y(85)
         pdf.set_font('Arial', 'B', 10)
         pdf.cell(0, 8, f'TARIH: {tarih}', 0, 1, 'R')
 
@@ -557,6 +565,12 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
             if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 yazilacak = format_money_value(val, kur_m)
+            elif low in {"adet", "qty", "quantity", "miktar", "unit"}:
+                try:
+                    f_val = float(val)
+                    yazilacak = cevir_tr(str(int(f_val)) if f_val.is_integer() else str(val))
+                except:
+                    yazilacak = cevir_tr(str(val))
             else:
                 yazilacak = cevir_tr(str(val))
 
@@ -714,6 +728,18 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
             if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 cell.value = format_money_value(val, kur_m)
+                if align == 'R':
+                    cell.alignment = Alignment(horizontal="right")
+                elif align == 'C':
+                    cell.alignment = Alignment(horizontal="center")
+                else:
+                    cell.alignment = Alignment(horizontal="left")
+            elif low in {"adet", "qty", "quantity", "miktar", "unit"}:
+                try:
+                    f_val = float(val)
+                    cell.value = str(int(f_val)) if f_val.is_integer() else str(val)
+                except:
+                    cell.value = str(val)
                 if align == 'R':
                     cell.alignment = Alignment(horizontal="right")
                 elif align == 'C':
