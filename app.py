@@ -366,6 +366,7 @@ st.text_area(
     placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz..."
 )
 
+# KANKA: SENİN DEĞİŞTİRDİĞİN BUTON BURADA!
 if st.button("🔄 Notları Kaydet"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
@@ -448,7 +449,6 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 text_val = format_money_value(val, kur_m)
             elif low in {"adet", "qty", "quantity", "miktar", "unit"}:
-                # KANKA: İŞTE O ADET KISMINI TAMSAYI YAPAN SİHİRLİ KOD BURADA
                 try:
                     f_val = float(val)
                     text_val = str(int(f_val)) if f_val.is_integer() else str(val)
@@ -518,6 +518,8 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
+            # Sayfa geçişlerinde tablo kaldığı yerden antetin altından başlasın diye
+            self.set_y(85)
 
     pdf = PDF()
     pdf.add_page()
@@ -526,6 +528,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
 
+    # KANKA: SENİN YAZDIĞIN KISIM (BAŞLIKLAR VE HİZALAMALAR) BURADA!
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.set_y(65)
         pdf.cell(130, 8, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
@@ -546,15 +549,25 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     pdf.set_draw_color(0, 0, 0)
     pdf.set_line_width(0.2)
-    pdf.set_fill_color(255, 255, 255)
+    
+    # KANKA: İKİNCİ SAYFAYA GEÇİNCE BAŞLIKLARI TEKRAR YAZDIRAN ÖZEL FONKSİYON
+    def tablo_basliklarini_ciz():
+        pdf.set_fill_color(255, 255, 255)
+        pdf.set_font('Arial', 'B', 9)
+        for idx, header in enumerate(headers):
+            pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, 0, 'C', fill=True)
+        pdf.ln()
 
-    pdf.set_font('Arial', 'B', 9)
-    for idx, header in enumerate(headers):
-        pdf.cell(widths[idx], 10, cevir_tr(str(header)), 1, 0, 'C', fill=True)
-    pdf.ln()
+    tablo_basliklarini_ciz()
 
     pdf.set_font('Arial', '', 8)
     for index, row in df_out.iterrows():
+        # EĞER SAYFANIN ALTINA (240. mm) YAKLAŞILDIYSA YENİ SAYFA AÇ VE BAŞLIKLARI TEKRAR ÇİZ
+        if pdf.get_y() > 240:
+            pdf.add_page()
+            tablo_basliklarini_ciz()
+            pdf.set_font('Arial', '', 8)
+
         pdf.cell(widths[0], 8, str(index + 1), 1, 0, 'C', fill=True)
 
         for c_idx, col_name in enumerate(df_out.columns):
@@ -576,6 +589,10 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
             pdf.cell(widths[c_idx + 1], 8, yazilacak, 1, 0, align, fill=True)
 
         pdf.ln()
+
+    # KANKA: EĞER SAYFANIN ALTINA YAKLAŞILDIYSA TOPLAMLAR KUTUSUNU BÖLME, YENİ SAYFAYA AL
+    if pdf.get_y() > 225:
+        pdf.add_page()
 
     w_val = widths[-1]
 
