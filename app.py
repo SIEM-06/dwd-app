@@ -536,7 +536,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         pdf.set_font('Arial', 'B', 13)
         pdf.cell(0, 8, 'PROFORMA FATURA', 0, 1, 'C')
         # KANKA: TARİH VE TABLO ESKİ YERİNDEN (85. mm'den) DEVAM EDİYOR Kİ LOGOYU EZMESİN
-        pdf.set_y(85)
+        pdf.set_y(75)
         pdf.set_font('Arial', 'B', 10)
         pdf.cell(0, 8, f'TARIH: {tarih}', 0, 1, 'R')
 
