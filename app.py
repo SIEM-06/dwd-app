@@ -3,6 +3,7 @@ import pandas as pd
 import io
 import datetime
 import os
+import json
 
 from fpdf import FPDF
 from docx import Document
@@ -151,7 +152,7 @@ def toplam_sutununu_bul(dataframe, sablon_tipi):
     return dataframe.columns[-1]
 
 # =========================================================
-# PLATFORM ŞABLON SEÇİCİ
+# PLATFORM ŞABLON SEÇİCİ & YEDEKLEME (SIDEBAR)
 # =========================================================
 st.sidebar.markdown("### ⚙️ Sistem Ayarları")
 secili_sablon = st.sidebar.radio(
@@ -164,6 +165,33 @@ gizle_checkbox = st.sidebar.checkbox(
     value=False,
     help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu tamamen kaldırılır. (Sitede görünmeye devam eder)."
 )
+
+# KANKA: YEDEKLEME VE GERİ YÜKLEME ALANI
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 💾 Yedekleme & Geri Yükleme")
+st.sidebar.caption("Taslaklarınızı bilgisayarınıza kaydedip daha sonra geri yükleyebilirsiniz.")
+
+# Geri Yükleme Mekanizması
+yuklenen_dosya = st.sidebar.file_uploader("📂 Taslak Yükle (.json)", type=["json"])
+if yuklenen_dosya is not None:
+    if st.sidebar.button("🔄 Yüklü Taslağı Sisteme Uygula", type="primary"):
+        try:
+            yedek_veri = json.load(yuklenen_dosya)
+            
+            # Verileri Session State'e aktar
+            st.session_state.aktif_sablon = yedek_veri.get("sablon", "⚓ INNOMAR Özel Teklif")
+            st.session_state.not_alani = yedek_veri.get("notlar", "")
+            st.session_state.teklif_basligi_str = yedek_veri.get("teklif_basligi", "MY ADA DRY DOCK SERVICES QUOTATION;")
+            
+            # Dataframe'i geri oluştur
+            df_icerik = pd.DataFrame(yedek_veri.get("df", []))
+            if not df_icerik.empty:
+                st.session_state.veri_df = df_icerik
+            
+            st.sidebar.success("Taslak başarıyla yüklendi!")
+            st.rerun()
+        except Exception as e:
+            st.sidebar.error("Hatalı dosya formatı!")
 
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
     st.session_state.aktif_sablon = secili_sablon
@@ -219,11 +247,13 @@ elif "Dolar" in kur_secimi:
 else:
     sembol, kur_metin = "₺", "TL"
 
-# KANKA: İŞTE O DİNAMİK TEKLİF BAŞLIĞI KISMI!
 teklif_basligi_str = ""
 if secili_sablon == "⚓ INNOMAR Özel Teklif":
     st.write("---")
-    teklif_basligi_str = st.text_input("⚓ Teklif Başlığı:", "MY ADA DRY DOCK SERVICES QUOTATION;")
+    # Session state'den okuyarak geri yüklemelerde başlığın da gelmesini sağlıyoruz
+    varsayilan_baslik = st.session_state.get("teklif_basligi_str", "MY ADA DRY DOCK SERVICES QUOTATION;")
+    teklif_basligi_str = st.text_input("⚓ Teklif Başlığı:", varsayilan_baslik)
+    st.session_state.teklif_basligi_str = teklif_basligi_str
 
 # =========================================================
 # DİNAMİK SÜTUN YÖNETİMİ
@@ -376,6 +406,24 @@ if st.button("🔄 Notları Kaydet"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
 st.write("---")
+
+# KANKA: YEDEK İNDİRME BUTONU (JSON FORMATINDA)
+st.sidebar.markdown("---")
+yedek_verisi = {
+    "sablon": secili_sablon,
+    "teklif_basligi": teklif_basligi_str,
+    "notlar": st.session_state.not_alani,
+    "df": duzenlenmis_df.to_dict(orient="records")
+}
+yedek_json = json.dumps(yedek_verisi, indent=4, ensure_ascii=False)
+
+st.sidebar.download_button(
+    label="💾 Mevcut Taslağı İndir (.json)",
+    data=yedek_json,
+    file_name=f"Innomarin_Taslak_{dosya_tarihi}.json",
+    mime="application/json",
+    use_container_width=True
+)
 
 # =========================================================
 # WORD OLUŞTUR
