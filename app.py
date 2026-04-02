@@ -219,6 +219,12 @@ elif "Dolar" in kur_secimi:
 else:
     sembol, kur_metin = "₺", "TL"
 
+# KANKA: İŞTE O DİNAMİK TEKLİF BAŞLIĞI KISMI!
+teklif_basligi_str = ""
+if secili_sablon == "⚓ INNOMAR Özel Teklif":
+    st.write("---")
+    teklif_basligi_str = st.text_input("⚓ Teklif Başlığı:", "MY ADA DRY DOCK SERVICES QUOTATION;")
+
 # =========================================================
 # DİNAMİK SÜTUN YÖNETİMİ
 # =========================================================
@@ -366,7 +372,6 @@ st.text_area(
     placeholder="Buraya notlarınızı veya banka hesap bilgilerinizi girebilirsiniz..."
 )
 
-# KANKA: SENİN DEĞİŞTİRDİĞİN BUTON BURADA!
 if st.button("🔄 Notları Kaydet"):
     st.success("Notlarınız başarıyla hafızaya alındı! Çıktı alabilirsiniz.")
 
@@ -375,7 +380,7 @@ st.write("---")
 # =========================================================
 # WORD OLUŞTUR
 # =========================================================
-def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
+def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif, teklif_basligi):
     df_out = dataframe.copy()
     if gizle_aktif:
         birim_sutun = get_birim_col(df_out.columns)
@@ -408,7 +413,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         p_title = doc.add_paragraph()
-        p_title.add_run("•   MY ADA DRY DOCK SERVICES QUOTATION;").bold = True
+        p_title.add_run(f"•   {teklif_basligi}").bold = True
     else:
         p_title = doc.add_paragraph()
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -507,7 +512,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 # =========================================================
 # PDF OLUŞTUR
 # =========================================================
-def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
+def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif, teklif_basligi):
     df_out = dataframe.copy()
     if gizle_aktif:
         birim_sutun = get_birim_col(df_out.columns)
@@ -518,7 +523,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
         def header(self):
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
-            # Sayfa geçişlerinde tablo kaldığı yerden antetin altından başlasın diye
             self.set_y(85)
 
     pdf = PDF()
@@ -528,10 +532,9 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
 
-    # KANKA: SENİN YAZDIĞIN KISIM (BAŞLIKLAR VE HİZALAMALAR) BURADA!
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.set_y(65)
-        pdf.cell(130, 8, chr(149) + '   MY ADA DRY DOCK SERVICES QUOTATION;', 0, 0, 'L')
+        pdf.cell(130, 8, chr(149) + f'   {teklif_basligi}', 0, 0, 'L')
         pdf.cell(60, 8, f'DATE: {tarih}', 0, 1, 'R')
     else:
         pdf.set_y(65)
@@ -550,7 +553,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_draw_color(0, 0, 0)
     pdf.set_line_width(0.2)
     
-    # KANKA: İKİNCİ SAYFAYA GEÇİNCE BAŞLIKLARI TEKRAR YAZDIRAN ÖZEL FONKSİYON
     def tablo_basliklarini_ciz():
         pdf.set_fill_color(255, 255, 255)
         pdf.set_font('Arial', 'B', 9)
@@ -562,7 +564,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     pdf.set_font('Arial', '', 8)
     for index, row in df_out.iterrows():
-        # EĞER SAYFANIN ALTINA (240. mm) YAKLAŞILDIYSA YENİ SAYFA AÇ VE BAŞLIKLARI TEKRAR ÇİZ
         if pdf.get_y() > 240:
             pdf.add_page()
             tablo_basliklarini_ciz()
@@ -590,7 +591,6 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
         pdf.ln()
 
-    # KANKA: EĞER SAYFANIN ALTINA YAKLAŞILDIYSA TOPLAMLAR KUTUSUNU BÖLME, YENİ SAYFAYA AL
     if pdf.get_y() > 225:
         pdf.add_page()
 
@@ -636,7 +636,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 # =========================================================
 # EXCEL OLUŞTUR
 # =========================================================
-def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif):
+def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif, teklif_basligi):
     df_out = dataframe.copy()
     if gizle_aktif:
         birim_sutun = get_birim_col(df_out.columns)
@@ -664,7 +664,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         ws.sheet_view.showGridLines = False
-        ws[f'B{row_idx}'] = "• MY ADA DRY DOCK SERVICES QUOTATION;"
+        ws[f'B{row_idx}'] = f"• {teklif_basligi}"
         ws[f'B{row_idx}'].font = Font(bold=True, size=12)
         ws.cell(row=row_idx, column=len(df_out.columns) + 2).value = f"DATE: {tarih}"
         ws.cell(row=row_idx, column=len(df_out.columns) + 2).font = Font(bold=True)
@@ -843,7 +843,8 @@ with btn_word:
             st.session_state.not_alani,
             kur_metin,
             secili_sablon,
-            gizle_checkbox
+            gizle_checkbox,
+            teklif_basligi_str
         ),
         file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.docx",
         type="primary",
@@ -862,7 +863,8 @@ with btn_excel:
             st.session_state.not_alani,
             kur_metin,
             secili_sablon,
-            gizle_checkbox
+            gizle_checkbox,
+            teklif_basligi_str
         ),
         file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.xlsx",
         type="primary",
@@ -881,7 +883,8 @@ with btn_pdf:
             st.session_state.not_alani,
             kur_metin,
             secili_sablon,
-            gizle_checkbox
+            gizle_checkbox,
+            teklif_basligi_str
         ),
         file_name=f"{secili_sablon.split()[1]}_{dosya_tarihi}.pdf",
         type="primary",
