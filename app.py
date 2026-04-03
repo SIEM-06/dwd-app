@@ -1,3 +1,13 @@
+"""
+=========================================================================================
+PROJE: Kurumsal Doküman (Fatura & Teklif) Oluşturucu Platform
+AÇIKLAMA: Streamlit tabanlı, dinamik tablo yönetimi yapabilen, otomatik matematiksel
+hesaplamalar içeren ve anlık olarak PDF, Word, Excel formatlarında kurumsal antetli
+çıktılar üreten web uygulamasıdır. İçerisinde durum yönetimi (session_state) ve 
+JSON tabanlı yedekleme/geri yükleme (Save/Load) mimarisi barındırır.
+=========================================================================================
+"""
+
 import streamlit as st
 import pandas as pd
 import io
@@ -5,17 +15,25 @@ import datetime
 import os
 import json
 
+# PDF Üretimi için FPDF kütüphanesi
 from fpdf import FPDF
+
+# Word Üretimi için python-docx modülleri
 from docx import Document
 from docx.shared import Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 
+# Excel Üretimi için openpyxl modülleri
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.drawing.image import Image as xlImage
 
+# ---------------------------------------------------------------------------------------
+# APP KONFİGÜRASYONU
+# Sayfa yapısını geniş formatta ve varsayılan menü açık şekilde başlatır.
+# ---------------------------------------------------------------------------------------
 st.set_page_config(
     layout="wide",
     page_title="Doküman Oluşturucu Platform",
@@ -23,15 +41,20 @@ st.set_page_config(
 )
 
 # =========================================================
-# SABİTLER
+# SİSTEM SABİTLERİ
 # =========================================================
-ANTET_DOSYASI = "antet.png"              # PDF + Excel
-WORD_TEMPLATE = "word_template.docx"     # Word
+ANTET_DOSYASI = "antet.png"              # PDF ve Excel çıktıları için arka plan/logo dosyası
+WORD_TEMPLATE = "word_template.docx"     # Word çıktısı için temel şablon dosyası
 
 # =========================================================
-# YARDIMCI FONKSİYONLAR
+# YARDIMCI FONKSİYONLAR (HELPER METHODS)
 # =========================================================
+
 def cevir_tr(metin):
+    """
+    FPDF kütüphanesi varsayılan olarak Türkçe karakter (UTF-8) desteklemediği için,
+    PDF dökümanında hata almamak adına Türkçe karakterleri İngilizce karşılıklarına çevirir.
+    """
     tr_map = {
         'ş': 's', 'Ş': 'S',
         'ı': 'i', 'İ': 'I',
@@ -46,6 +69,10 @@ def cevir_tr(metin):
     return metin
 
 def get_alignment(col_name):
+    """
+    Sütun başlığına bakarak hücre içindeki metnin hizalamasını dinamik olarak belirler.
+    Finansal veriler sağa (R), miktarlar/sıra numaraları ortaya (C), metinler sola (L) hizalanır.
+    """
     name = str(col_name).lower()
     if any(x in name for x in ['fiyat', 'price', 'tutar', 'total', 'amount']):
         return 'R'
@@ -54,6 +81,10 @@ def get_alignment(col_name):
     return 'L'
 
 def get_pdf_widths(headers, total_w=190):
+    """
+    PDF tablosunun A4 kağıda tam sığması için (toplam genişlik genelde 190mm), 
+    sütun isimlerine göre oransal genişlik hesaplar.
+    """
     widths = []
     for h in headers:
         name = str(h).lower()
@@ -70,11 +101,16 @@ def get_pdf_widths(headers, total_w=190):
         else:
             widths.append(25)
 
+    # Toplam genişliği orantılayarak tabloyu kağıda yayar
     total = sum(widths)
     scale = total_w / total if total > 0 else 1
     return [w * scale for w in widths]
 
 def set_excel_col_widths(ws, headers):
+    """
+    Excel tablosundaki hücrelerin okunabilir olması için sütun içeriklerine göre
+    genişlik değerlerini (width) statik olarak ayarlar.
+    """
     for i, header in enumerate(headers, 1):
         col_letter = get_column_letter(i)
         name = str(header).lower()
@@ -91,12 +127,19 @@ def set_excel_col_widths(ws, headers):
             ws.column_dimensions[col_letter].width = 20
 
 def get_birim_col(df_columns):
+    """
+    Tablo içinde 'Birim Fiyat' sütununu bulur. Fiyat gizleme işlemi için gereklidir.
+    """
     for col in df_columns:
         if "birim fiyat" in str(col).lower():
             return col
     return None
 
 def format_money_value(val, kur_m):
+    """
+    Finansal değerleri binlik ayraçlı ve para birimli formata dönüştürür.
+    Hatalı veya sıfır değerler için '-NIL-' döndürür. Örn: 1000 -> 1.000 TL
+    """
     try:
         fiyat = float(str(val).replace(',', '.'))
         if pd.isna(fiyat) or fiyat <= 0:
@@ -106,12 +149,20 @@ def format_money_value(val, kur_m):
         return "-NIL-"
 
 def guvenli_table_style(table, style_name="Table Grid"):
+    """
+    Word şablonunda belirli bir tablo stili yoksa uygulamanın çökmesini engellemek için
+    yazılmış güvenli stil atama fonksiyonudur (Try-Catch bloğu içerir).
+    """
     try:
         table.style = style_name
     except Exception:
         pass
 
 def kolonu_bul(columns, adaylar):
+    """
+    Kullanıcının sütun adını büyük/küçük veya hatalı yazma ihtimaline karşı
+    belirlenen anahtar kelimelere (adaylar) göre doğru sütunu tespit eder.
+    """
     for col in columns:
         low = str(col).strip().lower()
         if low in adaylar:
@@ -119,8 +170,15 @@ def kolonu_bul(columns, adaylar):
     return None
 
 def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
+    """
+    MERKEZİ HESAPLAMA MOTORU:
+    1. Yeni veya boş satırlardaki KDV oranlarını otomatik olarak %20'ye sabitler.
+    2. Adet, Miktar vb. sütunlar ile Birim Fiyat sütunlarını algılayıp çarparak Tutar'ı otomatik hesaplar.
+    3. Null veya NaN (boş) değerleri matematiksel işleme uygun hale getirir.
+    """
     df_calc = dataframe.copy()
 
+    # NaN ve format düzeltmeleri
     for col in df_calc.columns:
         low = str(col).strip().lower()
         if low in {"adet", "qty", "quantity", "miktar"}:
@@ -132,6 +190,7 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
         else:
             df_calc[col] = df_calc[col].fillna("")
 
+    # Çarpım İşlemi (Adet * Birim Fiyat = Tutar)
     if sablon_tipi == "📄 Standart Proforma Fatura":
         adet_col = kolonu_bul(df_calc.columns, {"adet", "qty", "quantity", "miktar"})
         birim_col = kolonu_bul(df_calc.columns, {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price"})
@@ -145,6 +204,9 @@ def otomatik_hesaplari_uygula(dataframe, sablon_tipi):
     return df_calc
 
 def toplam_sutununu_bul(dataframe, sablon_tipi):
+    """
+    Genel hesaplamalar için tutarların bulunduğu (toplanacak) ana sütunu tespit eder.
+    """
     if sablon_tipi == "📄 Standart Proforma Fatura":
         tutar_col = kolonu_bul(dataframe.columns, {"tutar", "total", "amount"})
         if tutar_col is not None:
@@ -152,47 +214,50 @@ def toplam_sutununu_bul(dataframe, sablon_tipi):
     return dataframe.columns[-1]
 
 # =========================================================
-# PLATFORM ŞABLON SEÇİCİ & YEDEKLEME (SIDEBAR)
+# YÖNETİM PANELİ VE YEDEKLEME SİSTEMİ (SIDEBAR)
 # =========================================================
 st.sidebar.markdown("### ⚙️ Sistem Ayarları")
+
+# Şablon Seçimi
 secili_sablon = st.sidebar.radio(
     "📝 Çalışma Şablonunu Seçin:",
     ["⚓ INNOMAR Özel Teklif", "📄 Standart Proforma Fatura"]
 )
 
+# Gizlilik Ayarı
 gizle_checkbox = st.sidebar.checkbox(
     "🔒 Birim Fiyat Sütununu Çıktılarda Gizle",
     value=False,
     help="İşaretlendiğinde, indirilen dosyalarda Birim Fiyat sütunu tamamen kaldırılır. (Sitede görünmeye devam eder)."
 )
 
-# KANKA: YEDEKLEME VE GERİ YÜKLEME ALANI
+# --- TASLAK GERİ YÜKLEME MİMARİSİ ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 💾 Yedekleme & Geri Yükleme")
 st.sidebar.caption("Taslaklarınızı bilgisayarınıza kaydedip daha sonra geri yükleyebilirsiniz.")
 
-# Geri Yükleme Mekanizması
 yuklenen_dosya = st.sidebar.file_uploader("📂 Taslak Yükle (.json)", type=["json"])
 if yuklenen_dosya is not None:
     if st.sidebar.button("🔄 Yüklü Taslağı Sisteme Uygula", type="primary"):
         try:
             yedek_veri = json.load(yuklenen_dosya)
             
-            # Verileri Session State'e aktar
+            # Yüklenen JSON verilerini Session State (Oturum Belleği) içine aktarıyoruz
             st.session_state.aktif_sablon = yedek_veri.get("sablon", "⚓ INNOMAR Özel Teklif")
             st.session_state.not_alani = yedek_veri.get("notlar", "")
             st.session_state.teklif_basligi_str = yedek_veri.get("teklif_basligi", "MY ADA DRY DOCK SERVICES QUOTATION;")
             
-            # Dataframe'i geri oluştur
+            # Veri tablosunu (Dataframe) yeniden inşa ediyoruz
             df_icerik = pd.DataFrame(yedek_veri.get("df", []))
             if not df_icerik.empty:
                 st.session_state.veri_df = df_icerik
             
             st.sidebar.success("Taslak başarıyla yüklendi!")
-            st.rerun()
+            st.rerun() # Arayüzü yeni verilerle yenile
         except Exception as e:
             st.sidebar.error("Hatalı dosya formatı!")
 
+# İlk açılışta veya şablon değiştiğinde varsayılan verileri sisteme yükler
 if 'aktif_sablon' not in st.session_state or st.session_state.aktif_sablon != secili_sablon:
     st.session_state.aktif_sablon = secili_sablon
 
@@ -230,7 +295,7 @@ st.markdown(
 )
 
 # =========================================================
-# ÜST PANEL: TARİH VE PARA BİRİMİ
+# ÜST PANEL: TARİH VE PARA BİRİMİ YÖNETİMİ
 # =========================================================
 col_t, col_kur = st.columns([1, 1])
 
@@ -240,6 +305,7 @@ dosya_tarihi = secilen_tarih.strftime("%d_%m_%Y")
 
 kur_secimi = col_kur.selectbox("Para Birimi", ["Euro (€)", "Dolar ($)", "Türk Lirası (₺)"])
 
+# Kur seçimine göre belge sembollerini ve metinlerini ayarlar
 if "Euro" in kur_secimi:
     sembol, kur_metin = "€", "EURO"
 elif "Dolar" in kur_secimi:
@@ -247,16 +313,16 @@ elif "Dolar" in kur_secimi:
 else:
     sembol, kur_metin = "₺", "TL"
 
+# Özel Teklif şablonu için Dinamik Başlık Alanı
 teklif_basligi_str = ""
 if secili_sablon == "⚓ INNOMAR Özel Teklif":
     st.write("---")
-    # Session state'den okuyarak geri yüklemelerde başlığın da gelmesini sağlıyoruz
     varsayilan_baslik = st.session_state.get("teklif_basligi_str", "MY ADA DRY DOCK SERVICES QUOTATION;")
     teklif_basligi_str = st.text_input("⚓ Teklif Başlığı:", varsayilan_baslik)
     st.session_state.teklif_basligi_str = teklif_basligi_str
 
 # =========================================================
-# DİNAMİK SÜTUN YÖNETİMİ
+# DİNAMİK SÜTUN YÖNETİMİ (KOLON EKLEME/ÇIKARMA)
 # =========================================================
 st.write("---")
 st.caption(
@@ -274,6 +340,7 @@ if len(yeni_sutunlar) < 2:
     st.warning("Lütfen tabloda en az 2 sütun bırakın.")
     yeni_sutunlar = st.session_state.veri_df.columns.tolist()
 
+# Eğer kullanıcı sütun isimlerini değiştirirse, eski verileri kaybetmeden yeni tabloyu inşa eder
 if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
     eski_df = st.session_state.veri_df
     yeni_df = pd.DataFrame(columns=yeni_sutunlar)
@@ -285,24 +352,22 @@ if yeni_sutunlar != st.session_state.veri_df.columns.tolist():
             yeni_df[col] = ""
 
     son_sutun_adi = yeni_sutunlar[-1]
-    yeni_df[son_sutun_adi] = pd.to_numeric(
-        yeni_df[son_sutun_adi],
-        errors='coerce'
-    ).fillna(0.0)
+    yeni_df[son_sutun_adi] = pd.to_numeric(yeni_df[son_sutun_adi], errors='coerce').fillna(0.0)
 
     st.session_state.veri_df = otomatik_hesaplari_uygula(yeni_df, secili_sablon)
     st.rerun()
 
 # =========================================================
-# TABLO EDİTÖRÜ 
+# TABLO EDİTÖRÜ (KULLANICI ARAYÜZÜ)
 # =========================================================
 df_ui = st.session_state.veri_df.copy()
+# Kullanıcıya görsel olarak daha anlaşılır olması için index (sıra no) 1'den başlatılır
 df_ui.index = df_ui.index + 1 
 
+# Tablodaki sütunların veri tiplerine göre arayüzdeki input (girdi) şekillerini ayarlar
 col_config = {}
 for col in df_ui.columns:
     low = str(col).strip().lower()
-
     if low in {"adet", "qty", "quantity", "miktar"}:
         col_config[col] = st.column_config.NumberColumn(col, format="%d")
     elif low in {"birim fiyatı", "birim fiyati", "birim fiyat", "unit price", "price", "tutar", "total", "amount"}:
@@ -312,6 +377,7 @@ for col in df_ui.columns:
 
 st.info("💡 Tablodaki hücrelerin üzerine tıklayıp değiştirebilirsiniz. Yeni satır için '+' butonunu kullanın.")
 
+# Streamlit data_editor bileşeni (Etkileşimli Excel benzeri yapı)
 duzenlenmis_df_ui = st.data_editor(
     df_ui,
     column_config=col_config,
@@ -321,11 +387,13 @@ duzenlenmis_df_ui = st.data_editor(
     key="veri_editoru"
 )
 
+# Arka planda işlem yapabilmek için indexi tekrar 0 tabanlı sisteme döndürürüz
 duzenlenmis_df = duzenlenmis_df_ui.copy()
 duzenlenmis_df.reset_index(drop=True, inplace=True)
 
 # =========================================================
-# OTOMATİK YENİLEME VE HAZIR SATIR SİSTEMİ
+# OTOMATİK YENİLEME (TETİKLEYİCİ) SİSTEMİ
+# Yeni bir satır eklendiğinde veya veri değiştiğinde hesaplamaları günceller
 # =========================================================
 hesaplanmis_df = otomatik_hesaplari_uygula(duzenlenmis_df, secili_sablon)
 
@@ -350,18 +418,19 @@ else:
 
 if guncelle:
     st.session_state.veri_df = hesaplanmis_df
-    st.rerun()
+    st.rerun() # Sayfayı yeni hesaplanmış değerlerle yenile
 
 duzenlenmis_df = hesaplanmis_df
 
 # =========================================================
-# HESAPLAMALAR
+# TOPLAM HESAPLAMALARI (ARA TOPLAM, KDV, GENEL TOPLAM)
 # =========================================================
 toplam_sutunu = toplam_sutununu_bul(duzenlenmis_df, secili_sablon)
 fiyatlar = pd.to_numeric(duzenlenmis_df[toplam_sutunu], errors='coerce').fillna(0)
 
 ara_toplam = fiyatlar.sum()
 
+# Her satırın KDV oranını bağımsız olarak işleme alır
 if secili_sablon == "📄 Standart Proforma Fatura":
     kdv_col = kolonu_bul(duzenlenmis_df.columns, {"kdv"})
     if kdv_col is not None:
@@ -383,10 +452,12 @@ else:
 
 genel_toplam = ara_toplam + kdv
 
+# Ekranda gösterilecek formatlı string metinleri oluşturur
 ara_str = f"{ara_toplam:,.0f}".replace(",", ".") + f" {kur_metin}"
 kdv_str = f"{kdv:,.0f}".replace(",", ".") + f" {kur_metin}"
 genel_str = f"{genel_toplam:,.0f}".replace(",", ".") + f" {kur_metin}"
 
+# Görüntüleme Paneli (Metrikler)
 st.write("---")
 col_a, col_b, col_c = st.columns(3)
 col_a.metric("Ara Toplam", ara_str)
@@ -407,8 +478,9 @@ if st.button("🔄 Notları Kaydet"):
 
 st.write("---")
 
-# KANKA: YEDEK İNDİRME BUTONU (JSON FORMATINDA)
+# --- TASLAK KAYDETME (İNDİRME) ALANI ---
 st.sidebar.markdown("---")
+# Mevcut tüm verileri tek bir JSON objesinde toplayıp dışa aktarır
 yedek_verisi = {
     "sablon": secili_sablon,
     "teklif_basligi": teklif_basligi_str,
@@ -426,9 +498,13 @@ st.sidebar.download_button(
 )
 
 # =========================================================
-# WORD OLUŞTUR
+# ÇIKTI MOTORU 1: WORD DOKÜMANI OLUŞTURMA
 # =========================================================
 def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif, teklif_basligi):
+    """
+    Girilen verileri işleyerek Microsoft Word (.docx) dosyası üretir.
+    Logoyu Üst Bilgi (Header) kısmına yerleştirerek sayfa hizalamasını korur.
+    """
     df_out = dataframe.copy()
     if gizle_aktif:
         birim_sutun = get_birim_col(df_out.columns)
@@ -442,6 +518,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     else:
         doc = Document()
 
+    # Sayfa Marjları ve Header Konfigürasyonu
     for section in doc.sections:
         section.top_margin = Cm(2.0)       
         section.bottom_margin = Cm(4.5)
@@ -449,6 +526,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         section.right_margin = Cm(2.0)
         section.header_distance = Cm(1.0)  
         
+        # Logoyu Header'a (Üst Bilgiye) Ekleme İşlemi
         if os.path.exists("ust_bar.png"):
             header = section.header
             p_logo = header.paragraphs[0] if len(header.paragraphs) > 0 else header.add_paragraph()
@@ -457,6 +535,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             r_logo = p_logo.add_run()
             r_logo.add_picture("ust_bar.png", width=Cm(17))
 
+    # Tablonun logoya girmemesi için alt satıra itme işlemi
     doc.add_paragraph("\n\n\n")
 
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
@@ -475,6 +554,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     guvenli_table_style(table, "Table Grid")
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
+    # Tablo Sütun Başlıkları Çizimi
     for idx, header in enumerate(headers):
         cell = table.rows[0].cells[idx]
         cell.text = str(header)
@@ -489,6 +569,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
         elif align == 'C':
             cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
+    # Tablo İçeriklerinin Doldurulması
     for index, row in df_out.iterrows():
         row_cells = table.add_row().cells
         row_cells[0].text = str(index + 1)
@@ -499,9 +580,11 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             align = get_alignment(col_name)
             low = str(col_name).strip().lower()
 
+            # Veri Formatlama Mantığı
             if low in {"price", "tutar", "total", "amount", "birim fiyatı", "birim fiyati", "birim fiyat", "unit price"}:
                 text_val = format_money_value(val, kur_m)
             elif low in {"adet", "qty", "quantity", "miktar", "unit"}:
+                # Sayıları tam sayıya çevirme filtresi ("2.0" yerine "2")
                 try:
                     f_val = float(val)
                     text_val = str(int(f_val)) if f_val.is_integer() else str(val)
@@ -520,6 +603,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
             elif align == 'C':
                 row_cells[c_idx + 1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
+    # Tablo Altı Toplamlar Bölümü
     labels = (
         ["TOTAL PRICE", "VAT (20%)", "GRAND TOTAL"]
         if sablon_tipi == "⚓ INNOMAR Özel Teklif"
@@ -530,6 +614,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     for i in range(3):
         row_cells = table.add_row().cells
         
+        # Sola boş kalan hücreleri estetik amaçlı birleştir (Merge)
         if len(headers) > 2:
             row_cells[0].merge(row_cells[-3])
             row_cells[0].text = ""
@@ -548,6 +633,7 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
 
     doc.add_paragraph()
 
+    # Notların Eklenmesi
     for satir in str(notlar).split('\n'):
         p = doc.add_paragraph(satir)
         if p.runs:
@@ -558,9 +644,13 @@ def word_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_ti
     return bio.getvalue()
 
 # =========================================================
-# PDF OLUŞTUR
+# ÇIKTI MOTORU 2: PDF DOKÜMANI OLUŞTURMA
 # =========================================================
 def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif, teklif_basligi):
+    """
+    Verilen verilerle otomatik sayfa atlama, sayfa sonu algılama ve başlık tekrarlama
+    mekanizmalarına sahip kurumsal bir PDF dokümanı oluşturur.
+    """
     df_out = dataframe.copy()
     if gizle_aktif:
         birim_sutun = get_birim_col(df_out.columns)
@@ -569,17 +659,21 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
     class PDF(FPDF):
         def header(self):
+            # Her yeni sayfa eklendiğinde arka plan logosunu otomatik basar
             if os.path.exists(ANTET_DOSYASI):
                 self.image(ANTET_DOSYASI, x=0, y=0, w=210, h=297)
+            # Metnin yeni sayfada logoyu ezmemesi için başlangıç noktasını 85mm'ye ayarlar
             self.set_y(85)
 
     pdf = PDF()
     pdf.add_page()
+    # Alt marjini 45mm yaparak antetin alt kısmındaki tasarıma yazı binmesini engeller
     pdf.set_auto_page_break(auto=True, margin=45)
 
     pdf.set_font('Arial', 'B', 10)
     pdf.set_text_color(0, 0, 0)
 
+    # Başlık ve Tarih Yerleşimi (Fatura Başlığı daha yukarıda başlatılır)
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         pdf.set_y(65)
         pdf.cell(130, 8, chr(149) + f'   {teklif_basligi}', 0, 0, 'L')
@@ -602,6 +696,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     pdf.set_line_width(0.2)
     
     def tablo_basliklarini_ciz():
+        """Tablonun en üst kısmındaki ana başlıkları (Sıra, Açıklama, Adet vb.) çizer."""
         pdf.set_fill_color(255, 255, 255)
         pdf.set_font('Arial', 'B', 9)
         for idx, header in enumerate(headers):
@@ -611,7 +706,11 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     tablo_basliklarini_ciz()
 
     pdf.set_font('Arial', '', 8)
+    
+    # Satırların Çizilmesi ve Sayfa Sonu (Page Break) Kontrolü
     for index, row in df_out.iterrows():
+        # EĞER Y EKSENİ (DİKEY POZİSYON) 240MM'Yİ GEÇTİYSE SAYFA DOLDU DEMEKTİR
+        # Yeni sayfa açıp tablo başlıklarını tekrar yazdırarak kopukluğu engeller
         if pdf.get_y() > 240:
             pdf.add_page()
             tablo_basliklarini_ciz()
@@ -639,11 +738,13 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
 
         pdf.ln()
 
+    # Toplamların Kesilmemesi İçin Kontrol (Eğer yer kalmadıysa toplamları yeni sayfaya taşır)
     if pdf.get_y() > 225:
         pdf.add_page()
 
     w_val = widths[-1]
 
+    # Alt Toplamlar İçin Hizalama Hesabı
     label_w = 0
     label_cols = 0
     for w in reversed(widths[:-1]):
@@ -655,6 +756,7 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     w_label = label_w
     w_empty = sum(widths[:-1 - label_cols]) if len(widths) > label_cols + 1 else 0
 
+    # Toplamlar Tablosu Çizimi
     pdf.set_font('Arial', '', 9)
     if w_empty > 0:
         pdf.cell(w_empty, 8, '', 0, 0)
@@ -682,9 +784,13 @@ def pdf_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tip
     return pdf.output(dest='S').encode('latin-1')
 
 # =========================================================
-# EXCEL OLUŞTUR
+# ÇIKTI MOTORU 3: EXCEL DOKÜMANI OLUŞTURMA
 # =========================================================
 def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_tipi, gizle_aktif, teklif_basligi):
+    """
+    Pandas verilerini saf Excel formatına (XLSX) çevirir.
+    Hücre borderları (çizgiler), renk paletleri ve image injection işlemlerini yapar.
+    """
     df_out = dataframe.copy()
     if gizle_aktif:
         birim_sutun = get_birim_col(df_out.columns)
@@ -698,18 +804,21 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
 
     row_idx = 1
 
+    # Excel içine Logoyu Gömme İşlemi (Image Injection)
     if os.path.exists(ANTET_DOSYASI):
         img = xlImage(ANTET_DOSYASI)
         oran = 760 / img.width
         img.width = 760
         img.height = int(img.height * oran)
         ws.add_image(img, 'A1')
+        # Logonun hücreleri ezmemesi için başlangıç satırını 22'ye öteliyoruz
         row_idx = 22
     else:
         ws['A1'] = "UYARI: antet.png bulunamadı."
         ws['A1'].font = Font(bold=True, color="FF0000")
         row_idx = 6
 
+    # Başlık ve Müşteri Bilgileri Yapılandırması
     if sablon_tipi == "⚓ INNOMAR Özel Teklif":
         ws.sheet_view.showGridLines = False
         ws[f'B{row_idx}'] = f"• {teklif_basligi}"
@@ -859,7 +968,7 @@ def excel_olustur(dataframe, a_str, k_str, g_str, tarih, notlar, kur_m, sablon_t
     return output.getvalue()
 
 # =========================================================
-# DOSYA DURUM BİLGİLERİ
+# DOSYA DURUMU BİLGİLENDİRME PANELİ
 # =========================================================
 st.markdown("### 📎 Şablon Durumu")
 
@@ -874,7 +983,7 @@ else:
     st.warning("⚠️ antet.png bulunamadı. PDF ve Excel çıktılarında antet görünmeyecek.")
 
 # =========================================================
-# İNDİRME BUTONLARI
+# İNDİRME BUTONLARI (BİTİŞ BÖLÜMÜ)
 # =========================================================
 st.markdown("### 📥 Çıktı Al")
 btn_word, btn_excel, btn_pdf = st.columns(3)
